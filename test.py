@@ -41,6 +41,7 @@ parser.add_argument("--debug", action="store_true", help="Debug mode")
 args = parser.parse_args()
 
 if __name__ == '__main__':
+    pygame.init()
     config = GoogleSnakeConfig()
     env = GoogleSnakeEnv(config, seed=args.seed, ui=args.ui)
     env.reset()

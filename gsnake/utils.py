@@ -30,11 +30,11 @@ class SnakeAction(IntEnum):
     """
     Enum representing the action of the snake
     """
-    LEFT = -1
-    FORWARD = 0
-    RIGHT = 1
+    LEFT = 0
+    FORWARD = 1
+    RIGHT = 2
     # Only for internal calculations
-    BACKWARD = 2
+    BACKWARD = 3
 
     @staticmethod
     def absolute_direction(direction, action):
@@ -45,7 +45,7 @@ class SnakeAction(IntEnum):
         :return: Direction of the snake after taking the action
         """
         # return (direction + action) % 4
-        return (direction + action-1) % 4 + 1  # gui compat
+        return (direction + action-2) % 4 + 1  # gui compat
 
     @staticmethod
     def absolute_position(direction, action):
@@ -55,9 +55,9 @@ class SnakeAction(IntEnum):
         :param action: The action to take
         :return: The lambda function takes row, col as input and relative position as output
         """
-        print('DIR:', direction)
-        print('ACT:', action)
-        print('ABS DIR:', SnakeAction.absolute_direction(direction, action))
+        # print('DIR:', direction)
+        # print('ACT:', action)
+        # print('ABS DIR:', SnakeAction.absolute_direction(direction, action))
         if SnakeAction.absolute_direction(direction, action) == SnakeState.SNAKE_U:
             return lambda row, col: (row - 1, col)
         elif SnakeAction.absolute_direction(direction, action) == SnakeState.SNAKE_R:

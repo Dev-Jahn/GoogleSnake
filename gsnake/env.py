@@ -12,9 +12,9 @@ class GoogleSnakeEnv(Env):
     def __init__(self, config: GoogleSnakeConfig, seed=None, ui=None):
         self.config = config
         self.seed = seed
-        self.action_space = spaces.Discrete(n=3, start=-1)
+        self.action_space = spaces.Discrete(n=3)
         self.observation_space = spaces.Box(
-            low=SnakeState.EMPTY.value, high=len(SnakeState),
+            low=1, high=len(SnakeState)+1,
             shape=self.config.grid_shape, dtype=np.uint8
         )
         self.state = SnakeGrid(self.config, seed=seed)
@@ -43,7 +43,7 @@ class GoogleSnakeEnv(Env):
         # If the snake is dead, terminate the episode with a negative reward
         if self.state.is_dead(*new_head_pos):
             self.state.reset()
-            return self.state.grid, self.config.DEATH, True, None
+            return self.state.grid, self.config.DEATH, True, {}
 
         # Update the internal state grid
         new_head = SnakeNode(*new_head_pos, direction=SnakeAction.absolute_direction(self.state.head.direction, action))
@@ -65,10 +65,12 @@ class GoogleSnakeEnv(Env):
                 #     self.state.generate_portal()
                 # else:
                 #     self.state.move(self.state.portalmarker, portal=True)
-        return self.state.grid, reward, False, None
+        return self.state.grid, reward, False, {}
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        self.state.reset()
         self.food_taken = 0
+        return self.state.grid
 
     def render(self, mode='human'):
         """Renders the environment.
@@ -93,12 +95,13 @@ class GoogleSnakeEnv(Env):
         Args:
             mode (str): the mode to render with
         """
-        if mode == 'human':
-            self.ui.render(self.state)
-        elif mode == 'rgb_array':
-            raise NotImplementedError
-        elif mode == 'ansi':
-            raise NotImplementedError
+        if self.ui is not None:
+            if mode == 'human':
+                self.ui.render(self.state)
+            elif mode == 'rgb_array':
+                raise NotImplementedError
+            elif mode == 'ansi':
+                raise NotImplementedError
 
     def close(self):
         if self.ui is not None:
