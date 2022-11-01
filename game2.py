@@ -53,8 +53,7 @@ def draw_snake():
         if dir == 1:
             pygame.draw.rect(screen, BLUE, (
                 draw_width * tile_width + connect_width // 2, draw_height * tile_height - connect_height // 2,
-                snake_width,
-                snake_height + connect_height))
+                snake_width, snake_height + connect_height))
         if dir == 2:
             pygame.draw.rect(screen, BLUE, (
                 draw_width * tile_width + connect_width // 2, draw_height * tile_height + connect_height // 2,
@@ -62,8 +61,7 @@ def draw_snake():
         if dir == 3:
             pygame.draw.rect(screen, BLUE, (
                 draw_width * tile_width + connect_width // 2, draw_height * tile_height + connect_height // 2,
-                snake_width,
-                snake_height + connect_height))
+                snake_width, snake_height + connect_height))
         if dir == 4:
             pygame.draw.rect(screen, BLUE, (
                 draw_width * tile_width - connect_width // 2, draw_height * tile_height + connect_height // 2,

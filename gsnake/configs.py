@@ -19,7 +19,7 @@ class GoogleSnakeConfig:
         # height of the game map
         self.height = height
         # start position and direction of the snake
-        self.start_pos = (self.width // 4, self.height // 2)
+        self.start_pos = (self.height // 2, self.width // 4)
         self.start_dir = SnakeState.SNAKE_R
         # Count of foods generated at once
         self.n_foods = n_foods if not mixed else random.choice([1, 3, 5])
@@ -65,7 +65,7 @@ class GoogleSnakeConfig:
 
     @property
     def grid_shape(self):
-        return self.width, self.height
+        return self.height, self.width
 
 
 class GUIConfig:
