@@ -1,7 +1,8 @@
+from collections import OrderedDict
 from enum import IntEnum, unique, auto
 
 import numpy as np
-from gym.spaces import Box, Tuple
+from gym.spaces import Box, Dict
 
 
 @unique
@@ -87,54 +88,22 @@ class SnakeAction(IntEnum):
             raise ValueError
 
 
-class SnakeObservation(Box):
+class OneHotBox(Box):
     """
-    Observation space for the snake environment
+    A box that can be one-hot encoded
     """
-    encodings = {
-        SnakeState.EMPTY: 0,
-        **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
-        SnakeState.FOOD: 2,
-        SnakeState.OBSTACLE: 3
-    }
 
-    def __init__(self, shape, multi_channel=False, dtype=np.uint8):
-        # -1 for binary representation except SnakeState.EMPTY
-        self.n_states = SnakeState.n_states_external()
-        self.n_channels = 1 if not multi_channel else self.n_states - 1
-        self.dtype = dtype
-        if multi_channel:
-            shape = (self.n_channels, *shape)
-            super(SnakeObservation, self).__init__(low=0, high=1, shape=shape, dtype=dtype)
-        else:
-            shape = (1, *shape)
-            super(SnakeObservation, self).__init__(low=0, high=self.n_states - 1, shape=shape, dtype=dtype)
+    def __init__(self, n, dtype=np.uint8):
+        super().__init__(low=0, high=1, shape=(n,), dtype=dtype)
 
-    def encode(self, obs):
-        """
-        Encode the internal states to the simplified observation space
-        Result is irreversible
-        :param obs: np.ndarray of shape (row, col) containing the internal states
-        :return: np.ndarray of shape (row, col) containing the observation space
-        """
-        return np.vectorize(self.encodings.get)(obs)
+    def sample(self):
+        return np.eye(self.shape[0], dtype=self.dtype)[np.random.randint(self.shape[0])]
 
-    def convert(self, obs):
-        """
-        Convert the internal states to the simplified observation space
-        :param obs: np.ndarray of shape (row, col) representing the internal states
-        :return: np.ndarray of shape (n_channels, row, col) representing the observation space
-        """
-        if self.n_channels == 1:
-            # Unsqueeze to add the channel dimension
-            obs = self.encode(obs)[None, ...].astype(self.dtype)
-        else:
-            # One-hot encoding
-            ohe = np.eye(self.n_states, dtype=self.dtype)[self.encode(obs)]
-            # Cut off the first channel containing SnakeState.EMPTY
-            obs = ohe.transpose((-1, *list(range(len(ohe.shape))[:-1])))[1:]
-        assert self.contains(obs), f'Converted input is not in the observation space'
-        return obs
+    def contains(self, x):
+        return np.array_equal(x, np.eye(self.shape[0], dtype=self.dtype)[np.argmax(x)])
+
+    def __repr__(self):
+        return "OneHotBox({})".format(self.shape)
 
 
 class SnakeNode:
@@ -347,3 +316,73 @@ class SnakeGrid:
 
         # Update grid cell value
         self.grid[new_head.pos] = self.head.direction
+
+
+class SnakeObservation(Dict):
+    """
+    Observation space for the snake environment
+    """
+    encodings = {
+        SnakeState.EMPTY: 0,
+        **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
+        SnakeState.FOOD: 2,
+        SnakeState.OBSTACLE: 3
+    }
+
+    def __init__(self, shape, multi_channel=False, dtype=np.uint8):
+        # -1 for binary representation except SnakeState.EMPTY
+        self.n_states = SnakeState.n_states_external()
+        self.n_channels = 1 if not multi_channel else self.n_states - 1
+        space_dict = {}
+        if multi_channel:
+            shape = (self.n_channels, *shape)
+            space_dict.update({'grid': Box(low=0, high=1, shape=shape, dtype=dtype)})
+        else:
+            shape = (1, *shape)
+            space_dict.update({'grid': Box(low=0, high=self.n_states - 1, shape=shape, dtype=dtype)})
+        space_dict.update(OrderedDict({
+            'head_row': OneHotBox(shape[1]),
+            'head_col': OneHotBox(shape[2]),
+            'direction': OneHotBox(4)
+        }))
+        super(SnakeObservation, self).__init__(space_dict)
+        self.dtype = dtype
+
+    def encode(self, obs):
+        """
+        Encode the internal states to the simplified observation space
+        Result is irreversible
+        :param obs: np.ndarray of shape (row, col) containing the internal states
+        :return: np.ndarray of shape (row, col) containing the observation space
+        """
+        return np.vectorize(self.encodings.get)(obs).astype(self.dtype)
+
+    def convert(self, state: SnakeGrid):
+        """
+        Convert the internal states to the simplified observation space
+        :param state: SnakeState object representing the internal states
+        :return: np.ndarray of shape (n_channels, row, col) representing the observation space
+        """
+        obs_dict = OrderedDict()
+        obs = state.grid
+        if self.n_channels == 1:
+            # Unsqueeze to add the channel dimension
+            obs = self.encode(obs)[None, ...]
+        else:
+            # One-hot encoding
+            ohe = np.eye(self.n_states, dtype=self.dtype)[self.encode(obs)]
+            # Cut off the first channel containing SnakeState.EMPTY
+            obs = ohe.transpose((-1, *list(range(len(ohe.shape))[:-1])))[1:]
+        obs_dict.update({
+            'grid': obs,
+            'head_row': np.eye(state.grid.shape[0], dtype=self.dtype)[state.head.pos[0]],
+            'head_col': np.eye(state.grid.shape[1], dtype=self.dtype)[state.head.pos[1]],
+            'direction': np.eye(4, dtype=self.dtype)[state.head.direction - min(SnakeState)]
+        })
+        assert self['grid'].contains(obs_dict['grid']), f'grid does not match with the observation space'
+        assert self['head_row'].contains(obs_dict['head_row']), f'head_row does not match with the observation space'
+        assert self['head_col'].contains(obs_dict['head_col']), f'head_col does not match with the observation space'
+        assert self['direction'].contains(obs_dict['direction']), f'direction does not match with the observation space'
+        assert self.contains(obs_dict), f'Observation does not match with the observation space'
+
+        return obs_dict

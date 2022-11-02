@@ -39,7 +39,7 @@ class GoogleSnakeEnv(Env):
         # If the snake is dead, terminate the episode with a negative reward
         if self.state.is_dead(*new_head_pos):
             self.state.reset()
-            return self.observation_space.convert(self.state.grid), self.config.DEATH, True, {}
+            return self.observation_space.convert(self.state), self.config.DEATH, True, {}
 
         # Update the internal state grid
         new_head = SnakeNode(*new_head_pos, direction=SnakeAction.absolute_direction(self.state.head.direction, action))
@@ -68,12 +68,12 @@ class GoogleSnakeEnv(Env):
         elif self.state.closest_food_dist() - dist > 0:
             reward -= self.config.DIST
 
-        return self.observation_space.convert(self.state.grid), reward, False, {}
+        return self.observation_space.convert(self.state), reward, False, {}
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         self.state.reset()
         self.food_taken = 0
-        return self.observation_space.convert(self.state.grid)
+        return self.observation_space.convert(self.state)
 
     def render(self, mode='human'):
         """Renders the environment.
