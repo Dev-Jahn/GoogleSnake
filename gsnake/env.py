@@ -9,12 +9,12 @@ from .configs import GoogleSnakeConfig
 
 
 class GoogleSnakeEnv(Env):
-    def __init__(self, config: GoogleSnakeConfig, seed=None, ui=None):
+    def __init__(self, config: GoogleSnakeConfig = GoogleSnakeConfig(), seed=None, ui=None):
         self.config = config
         self.seed = seed
         self.action_space = spaces.Discrete(n=3)
         self.observation_space = spaces.Box(
-            low=1, high=len(SnakeState)+1,
+            low=1, high=len(SnakeState) + 1,
             shape=self.config.grid_shape, dtype=np.uint8
         )
         self.state = SnakeGrid(self.config, seed=seed)
@@ -49,6 +49,7 @@ class GoogleSnakeEnv(Env):
         new_head = SnakeNode(*new_head_pos, direction=SnakeAction.absolute_direction(self.state.head.direction, action))
         # Check if the snake eats food
         eat_food = self.state.grid[new_head_pos] == SnakeState.FOOD.value
+        dist = self.state.closest_food_dist()
         self.state.move(new_head, eat_food=eat_food)
         # Generate new food
         if eat_food:
@@ -65,6 +66,12 @@ class GoogleSnakeEnv(Env):
                 #     self.state.generate_portal()
                 # else:
                 #     self.state.move(self.state.portalmarker, portal=True)
+        # Distance based reward
+        elif self.state.closest_food_dist() - dist < 0:
+            reward += self.config.DIST
+        elif self.state.closest_food_dist() - dist > 0:
+            reward -= self.config.DIST
+
         return self.state.grid, reward, False, {}
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):

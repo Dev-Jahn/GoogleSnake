@@ -55,13 +55,15 @@ class GoogleSnakeConfig:
         options = get_args(self._REWARDS)
         assert reward_mode in options, f"'{reward_mode}' is not in {options}"
         if reward_mode == 'basic':
-            self.DEATH = -1 * reward_scale
-            self.FOOD = 1 * reward_scale
+            self.DEATH = -10 * reward_scale
+            self.FOOD = 100 * reward_scale
             self.IDLE = 0 * reward_scale
+            self.DIST = 1 * reward_scale
         elif reward_mode == 'time_constrained':
-            self.DEATH = -1 * reward_scale
-            self.FOOD = 1 * reward_scale
-            self.IDLE = -0.1 * reward_scale
+            self.DEATH = -10 * reward_scale
+            self.FOOD = 100 * reward_scale
+            self.IDLE = -1 * reward_scale
+            self.DIST = 2 * reward_scale
 
     @property
     def grid_shape(self):

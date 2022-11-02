@@ -20,9 +20,9 @@ class SnakeState(IntEnum):
 
     def __str__(self):
         return f'{self.name}<{self.value}>'
+
     def __repr__(self):
         return f'{self.name}<{self.value}>'
-
 
 
 @unique
@@ -45,7 +45,7 @@ class SnakeAction(IntEnum):
         :return: Direction of the snake after taking the action
         """
         # return (direction + action) % 4
-        return (direction + action-2) % 4 + 1  # gui compat
+        return (direction + action - 2) % 4 + 1  # gui compat
 
     @staticmethod
     def absolute_position(direction, action):
@@ -141,7 +141,6 @@ class SnakeGrid:
         self.init_length = init_length
         self.seed = seed
         self.grid = np.zeros(config.grid_shape, dtype=np.uint8)
-        self.reset()
 
         # Cursor of the head and tail SnakeNode
         self.head = None
@@ -198,6 +197,15 @@ class SnakeGrid:
         """
         empty = np.argwhere(self.grid == SnakeState.EMPTY)
         return tuple(tuple(row) for row in empty[np.random.randint(len(empty), size=n), :])
+
+    def closest_food_dist(self):
+        """
+        Find distance between the closest food to the head of the snake
+        :return: Euclidean distance between the head and the closest food
+        """
+        food = np.argwhere(self.grid == SnakeState.FOOD)
+        head = np.array(self.head.pos)
+        return np.min(np.linalg.norm(food - head, axis=1))
 
     def get_snakes(self):
         """
