@@ -1,6 +1,7 @@
 from enum import IntEnum, unique, auto
 
 import numpy as np
+from gym.spaces import Box
 
 
 @unique
@@ -23,6 +24,22 @@ class SnakeState(IntEnum):
 
     def __repr__(self):
         return f'{self.name}<{self.value}>'
+
+    @classmethod
+    def n_states_internal(cls):
+        """
+        Get the number of all internal states
+        :return: The number of all internal states including all directions
+        """
+        return len(cls)
+
+    @classmethod
+    def n_states_external(cls):
+        """
+        Number of states that are visible to the agent
+        :return: number of states including SNAKE, EMPTY, FOOD and etc
+        """
+        return len([enum for enum in SnakeState if not enum.name.startswith('SNAKE')]) + 1
 
 
 @unique
@@ -68,6 +85,56 @@ class SnakeAction(IntEnum):
             return lambda row, col: (row, col - 1)
         else:
             raise ValueError
+
+
+class SnakeObservation(Box):
+    """
+    Observation space for the snake environment
+    """
+    encodings = {
+        SnakeState.EMPTY: 0,
+        **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
+        SnakeState.FOOD: 2,
+        SnakeState.OBSTACLE: 3
+    }
+
+    def __init__(self, shape, multi_channel=False, dtype=np.uint8):
+        # -1 for binary representation except SnakeState.EMPTY
+        self.n_states = SnakeState.n_states_external()
+        self.n_channels = 1 if not multi_channel else self.n_states - 1
+        self.dtype = dtype
+        if multi_channel:
+            shape = (self.n_channels, *shape)
+            super(SnakeObservation, self).__init__(low=0, high=1, shape=shape, dtype=dtype)
+        else:
+            shape = (1, *shape)
+            super(SnakeObservation, self).__init__(low=0, high=self.n_states-1, shape=shape, dtype=dtype)
+
+    def encode(self, obs):
+        """
+        Encode the internal states to the simplified observation space
+        Result is irreversible
+        :param obs: np.ndarray of shape (row, col) containing the internal states
+        :return: np.ndarray of shape (row, col) containing the observation space
+        """
+        return np.vectorize(self.encodings.get)(obs)
+
+    def convert(self, obs):
+        """
+        Convert the internal states to the simplified observation space
+        :param obs: np.ndarray of shape (row, col) representing the internal states
+        :return: np.ndarray of shape (n_channels, row, col) representing the observation space
+        """
+        if self.n_channels == 1:
+            # Unsqueeze to add the channel dimension
+            obs = self.encode(obs)[None, ...].astype(self.dtype)
+        else:
+            # One-hot encoding
+            ohe = np.eye(self.n_states, dtype=self.dtype)[self.encode(obs)]
+            # Cut off the first channel containing SnakeState.EMPTY
+            obs = ohe.transpose((-1, *list(range(len(ohe.shape))[:-1])))[1:]
+        assert self.contains(obs), f'Converted input is not in the observation space'
+        return obs
 
 
 class SnakeNode:
@@ -133,7 +200,6 @@ class SnakeNode:
 class SnakeGrid:
     """
     Grid class for the GoogleSnake game environment
-    Extends the Box class from gym.Space and contains actual cell states of grid
     """
 
     def __init__(self, config, init_length=2, seed=None):
@@ -145,11 +211,10 @@ class SnakeGrid:
         # Cursor of the head and tail SnakeNode
         self.head = None
         self.tail = None
-        self.reset()
 
     def reset(self):
         """
-        Reset the grid to all empty
+        Reset the grid to all empty and spawn objects
         :return:
         """
         self.grid.fill(SnakeState.EMPTY)
@@ -173,6 +238,12 @@ class SnakeGrid:
                 direction=start_dir
             )
         self.tail = cursor
+
+        # Draw
+        cursor = self.head
+        while cursor is not None:
+            self.grid[cursor.pos] = cursor.direction
+            cursor = cursor.next_node
 
     def generate_food(self, n=1):
         """

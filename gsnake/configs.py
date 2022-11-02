@@ -10,14 +10,20 @@ class GoogleSnakeConfig:
     """
     _REWARDS = Literal['basic', 'time_constrained']
 
-    def __init__(self, width=15, height=10, reward_mode: _REWARDS = 'basic', reward_scale=1.0,
+    def __init__(self, width=15, height=10, multi_channel=False, reward_mode: _REWARDS = 'basic', reward_scale=1.0,
                  n_foods=1, wall=False, portal=False, cheese=False, loop=False, reverse=False, moving=False,
                  yinyang=False, key=False, box=False, poison=False, transparent=False, flag=False, slough=False,
-                 peaceful=False, mixed=False):
+                 peaceful=False, mixed=False, seed=42, *args, **kwargs):
+
+        self.seed = seed
         # width of the game map
         self.width = width
         # height of the game map
         self.height = height
+
+        # whether to use multichannel one-hot or single channel image for observation
+        self.multi_channel = multi_channel
+
         # start position and direction of the snake
         self.start_pos = (self.height // 2, self.width // 4)
         self.start_dir = SnakeState.SNAKE_R
@@ -91,3 +97,27 @@ class GUIConfig:
     BLACK = (0, 0, 0)
     GREEN1 = (170, 215, 81)
     GREEN2 = (162, 209, 73)
+
+
+BLUE = (71, 117, 235)
+class TUIConfig:
+    # General
+    CAPTION = "Google Snake"
+
+    # Pixel sizes of elements
+    TILE_W = 20
+    TILE_H = 20
+
+    # Colors
+    BLUE = (71, 117, 235)
+    BLACK = (0, 0, 0)
+    GREEN1 = (170, 215, 81)
+    GREEN2 = (162, 209, 73)
+    RED = (255, 0, 0)
+
+    CMAP = {
+        SnakeState.EMPTY: GREEN1,
+        **{enum: BLUE for enum in SnakeState if enum.name.startswith('SNAKE')},
+        SnakeState.FOOD: RED,
+        SnakeState.OBSTACLE: BLACK
+    }

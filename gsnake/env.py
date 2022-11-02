@@ -4,7 +4,7 @@ import numpy as np
 from gym import Env, spaces
 
 from .ui import SnakeGUI, SnakeTUI
-from .utils import SnakeState, SnakeGrid, SnakeAction, SnakeNode
+from .utils import SnakeState, SnakeGrid, SnakeAction, SnakeNode, SnakeObservation
 from .configs import GoogleSnakeConfig
 
 
@@ -13,10 +13,7 @@ class GoogleSnakeEnv(Env):
         self.config = config
         self.seed = seed
         self.action_space = spaces.Discrete(n=3)
-        self.observation_space = spaces.Box(
-            low=1, high=len(SnakeState) + 1,
-            shape=self.config.grid_shape, dtype=np.uint8
-        )
+        self.observation_space = SnakeObservation(self.config.grid_shape, multi_channel=self.config.multi_channel)
         self.state = SnakeGrid(self.config, seed=seed)
         self.food_taken = 0
 
@@ -24,10 +21,9 @@ class GoogleSnakeEnv(Env):
         if ui == 'gui':
             self.ui = SnakeGUI(width=self.config.width, height=self.config.height)
         elif ui == 'tui':
-            self.ui = SnakeTUI()
+            self.ui = SnakeTUI(width=self.config.width, height=self.config.height)
         else:
             self.ui = None
-
         self.reset(seed=seed)
 
     def step(self, action: SnakeAction) -> tuple:
@@ -43,7 +39,7 @@ class GoogleSnakeEnv(Env):
         # If the snake is dead, terminate the episode with a negative reward
         if self.state.is_dead(*new_head_pos):
             self.state.reset()
-            return self.state.grid, self.config.DEATH, True, {}
+            return self.observation_space.convert(self.state.grid), self.config.DEATH, True, {}
 
         # Update the internal state grid
         new_head = SnakeNode(*new_head_pos, direction=SnakeAction.absolute_direction(self.state.head.direction, action))
@@ -72,12 +68,12 @@ class GoogleSnakeEnv(Env):
         elif self.state.closest_food_dist() - dist > 0:
             reward -= self.config.DIST
 
-        return self.state.grid, reward, False, {}
+        return self.observation_space.convert(self.state.grid), reward, False, {}
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         self.state.reset()
         self.food_taken = 0
-        return self.state.grid
+        return self.observation_space.convert(self.state.grid)
 
     def render(self, mode='human'):
         """Renders the environment.
@@ -104,7 +100,7 @@ class GoogleSnakeEnv(Env):
         """
         if self.ui is not None:
             if mode == 'human':
-                self.ui.render(self.state)
+                return self.ui.render(self.state)
             elif mode == 'rgb_array':
                 raise NotImplementedError
             elif mode == 'ansi':

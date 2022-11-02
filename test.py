@@ -12,12 +12,13 @@ parser = argparse.ArgumentParser()
 # Basics
 parser.add_argument("--width", default=15, help="Width of the game map")
 parser.add_argument("--height", default=10, help="Height of the game map")
+parser.add_argument("--multi_channel", action="store_true", default=False, help="Use multichannel one-hot observation")
 
 # Reproducibility
 parser.add_argument("--seed", default=42, help="Random seed")
 
 # Game settings
-parser.add_argument("--apple", default=5, help="Number of apples generated")
+parser.add_argument("--n_foods", default=5, help="Number of foods generated")
 parser.add_argument("--wall", action="store_true", help="Generate wall if snake eats food")
 parser.add_argument("--portal", action="store_true", help="Foods work as portals pairwise")
 parser.add_argument("--cheese", action="store_true", help="")
@@ -31,7 +32,7 @@ parser.add_argument("--poison", action="store_true", help="Generate poison food 
 parser.add_argument("--transparent", action="store_true", help="Body cells become penetrable for a while")
 parser.add_argument("--flag", action="store_true", help="Eating foods generates a flag obstacle")
 parser.add_argument("--slough", action="store_true", help="Eating foods generates a slough obstacle")
-parser.add_argument("--peachful", action="store_true", help="Snake Never dies")
+parser.add_argument("--peaceful", action="store_true", help="Snake Never dies")
 
 # Render options
 parser.add_argument("--ui", choices=['gui', 'tui', 'rgb_array', 'ansi'], help="Render methods")
@@ -42,7 +43,7 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
     pygame.init()
-    config = GoogleSnakeConfig()
+    config = GoogleSnakeConfig(**dict(args._get_kwargs()))
     env = GoogleSnakeEnv(config, seed=args.seed, ui=args.ui)
     env.reset()
     env.render()

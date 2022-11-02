@@ -1,15 +1,36 @@
+from abc import ABCMeta, abstractmethod
+import time
+
 import numpy as np
 import pygame
+from matplotlib import pyplot as plt
 from pygame import Rect
 
-from gsnake.configs import GUIConfig
+from gsnake.configs import GUIConfig, TUIConfig
 from gsnake.utils import SnakeState, SnakeNode
 
 
-class SnakeGUI:
+class SnakeUI(metaclass=ABCMeta):
+    """
+    Base class for Snake UI
+    """
+
     def __init__(self, width, height):
         self.width = width
         self.height = height
+
+    @abstractmethod
+    def render(self, state):
+        pass
+
+    @abstractmethod
+    def close(self):
+        pass
+
+
+class SnakeGUI(SnakeUI):
+    def __init__(self, width, height):
+        super().__init__(width, height)
         pygame.init()
         self.screen = pygame.display.set_mode(
             np.multiply((self.width, self.height), (GUIConfig.TILE_W, GUIConfig.TILE_H)))
@@ -19,12 +40,15 @@ class SnakeGUI:
             SnakeState.FOOD: pygame.transform.scale(pygame.image.load(GUIConfig.PATH_APPLE),
                                                     (GUIConfig.TILE_W, GUIConfig.TILE_H)),
         }
+        time.sleep(1)
+        print('GUI initialized')
 
     def render(self, state):
         self.draw_screen()
         self.draw_foods(state.get_foods())
         self.draw_snake(state.head)
         pygame.display.update()
+        time.sleep(0.05)
 
     def draw_foods(self, coords):
         # draw on screen
@@ -150,6 +174,18 @@ class SnakeGUI:
         pygame.quit()
 
 
-class SnakeTUI:
-    def __init__(self):
-        raise NotImplementedError
+class SnakeTUI(SnakeUI):
+    """
+    Terminal UI for snake game
+    """
+
+    def __init__(self, width, height):
+        super().__init__(width, height)
+        self.screen = np.zeros((3, height, width), dtype=np.int8)
+
+    def render(self, state):
+        self.screen = np.array(np.vectorize(TUIConfig.CMAP.get)(state.grid))
+        return self.screen.transpose((1, 2, 0))
+
+    def close(self):
+        pass
