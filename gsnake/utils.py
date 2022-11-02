@@ -1,7 +1,7 @@
 from enum import IntEnum, unique, auto
 
 import numpy as np
-from gym.spaces import Box
+from gym.spaces import Box, Tuple
 
 
 @unique
@@ -108,7 +108,7 @@ class SnakeObservation(Box):
             super(SnakeObservation, self).__init__(low=0, high=1, shape=shape, dtype=dtype)
         else:
             shape = (1, *shape)
-            super(SnakeObservation, self).__init__(low=0, high=self.n_states-1, shape=shape, dtype=dtype)
+            super(SnakeObservation, self).__init__(low=0, high=self.n_states - 1, shape=shape, dtype=dtype)
 
     def encode(self, obs):
         """

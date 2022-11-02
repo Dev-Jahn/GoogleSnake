@@ -81,7 +81,7 @@ class SnakeGUI(SnakeUI):
         height = GUIConfig.SNAK_H + GUIConfig.CONN_H // 2 * (node.direction in [SnakeState.SNAKE_U, SnakeState.SNAKE_D])
 
         pygame.draw.rect(surface=self.screen,
-                         color=GUIConfig.BLUE,
+                         color=GUIConfig.LIGHT_BLUE,
                          rect=Rect(left, top, width, height))
         # draw eyes
         eh, ew = 9, 6
@@ -131,28 +131,28 @@ class SnakeGUI(SnakeUI):
 
         if node.direction == SnakeState.SNAKE_U:
             pygame.draw.rect(surface=self.screen,
-                             color=GUIConfig.BLUE,
+                             color=GUIConfig.LIGHT_BLUE,
                              rect=Rect(xtile + GUIConfig.CONN_W // 2,
                                        ytile - GUIConfig.CONN_H // 2,
                                        GUIConfig.SNAK_W,
                                        GUIConfig.SNAK_H + GUIConfig.CONN_H))
         if node.direction == SnakeState.SNAKE_R:
             pygame.draw.rect(surface=self.screen,
-                             color=GUIConfig.BLUE,
+                             color=GUIConfig.LIGHT_BLUE,
                              rect=Rect(xtile + GUIConfig.CONN_W // 2,
                                        ytile + GUIConfig.CONN_H // 2,
                                        GUIConfig.SNAK_W + GUIConfig.CONN_W,
                                        GUIConfig.SNAK_H))
         if node.direction == SnakeState.SNAKE_D:
             pygame.draw.rect(surface=self.screen,
-                             color=GUIConfig.BLUE,
+                             color=GUIConfig.LIGHT_BLUE,
                              rect=Rect(xtile + GUIConfig.CONN_W // 2,
                                        ytile + GUIConfig.CONN_H // 2,
                                        GUIConfig.SNAK_W,
                                        GUIConfig.SNAK_H + GUIConfig.CONN_H))
         if node.direction == SnakeState.SNAKE_L:
             pygame.draw.rect(surface=self.screen,
-                             color=GUIConfig.BLUE,
+                             color=GUIConfig.LIGHT_BLUE,
                              rect=Rect(xtile - GUIConfig.CONN_W // 2,
                                        ytile + GUIConfig.CONN_H // 2,
                                        GUIConfig.SNAK_W + GUIConfig.CONN_W,

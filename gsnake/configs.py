@@ -93,13 +93,15 @@ class GUIConfig:
     CONN_H = TILE_H - SNAK_H
 
     # Colors
-    BLUE = (71, 117, 235)
+    LIGHT_BLUE = (71, 117, 235)
     BLACK = (0, 0, 0)
     GREEN1 = (170, 215, 81)
     GREEN2 = (162, 209, 73)
 
 
-BLUE = (71, 117, 235)
+LIGHT_BLUE = (71, 117, 235)
+
+
 class TUIConfig:
     # General
     CAPTION = "Google Snake"
@@ -109,7 +111,8 @@ class TUIConfig:
     TILE_H = 20
 
     # Colors
-    BLUE = (71, 117, 235)
+    BLUE = (0, 0, 255)
+    LIGHT_BLUE = (71, 117, 235)
     BLACK = (0, 0, 0)
     GREEN1 = (170, 215, 81)
     GREEN2 = (162, 209, 73)
@@ -117,7 +120,7 @@ class TUIConfig:
 
     CMAP = {
         SnakeState.EMPTY: GREEN1,
-        **{enum: BLUE for enum in SnakeState if enum.name.startswith('SNAKE')},
+        **{enum: LIGHT_BLUE for enum in SnakeState if enum.name.startswith('SNAKE')},
         SnakeState.FOOD: RED,
         SnakeState.OBSTACLE: BLACK
     }
