@@ -51,6 +51,7 @@ class GoogleSnakeEnv(Env):
         if eat_food:
             self.food_taken += 1
             reward += self.config.FOOD
+            if self.config.reward_mode == 'time_constrained_and_food':  reward += (self.food_taken - 1) * 2
             self.state.generate_food()
             # If wall option is enabled, generate an obstacle every odd number of foods eaten
             if self.config.wall and self.food_taken % 2 == 1:

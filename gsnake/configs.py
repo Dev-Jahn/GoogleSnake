@@ -8,7 +8,7 @@ class GoogleSnakeConfig:
     """
     Class for Game Configurations
     """
-    _REWARDS = Literal['basic', 'time_constrained']
+    _REWARDS = Literal['basic', 'time_constrained', 'time_constrained_and_food']
 
     def __init__(self, width=15, height=10, multi_channel=False, reward_mode: _REWARDS = 'basic', reward_scale=1.0,
                  n_foods=1, wall=False, portal=False, cheese=False, loop=False, reverse=False, moving=False,
@@ -58,6 +58,7 @@ class GoogleSnakeConfig:
         # If True, do not die with any collision. Reaching certain length will win the game
         self.peaceful = peaceful if not mixed else random.choice([True, False])
 
+        self.reward_mode = reward_mode
         options = get_args(self._REWARDS)
         assert reward_mode in options, f"'{reward_mode}' is not in {options}"
         if reward_mode == 'basic':
@@ -70,6 +71,12 @@ class GoogleSnakeConfig:
             self.FOOD = 100 * reward_scale
             self.IDLE = -1 * reward_scale
             self.DIST = 2 * reward_scale
+        elif reward_mode == 'time_constrained_and_food':
+            self.DEATH = 0
+            self.FOOD = (self.height + self.width) * 2
+            self.IDLE = -1
+            self.DIST = 0
+
 
     @property
     def grid_shape(self):
