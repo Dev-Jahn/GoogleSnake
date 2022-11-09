@@ -13,7 +13,7 @@ class GoogleSnakeEnv(Env):
         self.config = config
         self.seed = seed
         self.action_space = spaces.Discrete(n=3)
-        self.observation_space = SnakeObservation(self.config.grid_shape, multi_channel=self.config.multi_channel)
+        self.observation_space = SnakeObservation(self.config.grid_shape, multi_channel=self.config.multi_channel, direction_channel=self.config.direction_channel)
         self.state = SnakeGrid(self.config, seed=seed)
         self.food_taken = 0
 

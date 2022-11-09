@@ -43,6 +43,7 @@ class SnakeState(IntEnum):
         return len([enum for enum in SnakeState if not enum.name.startswith('SNAKE')]) + 1
 
 
+
 @unique
 class SnakeAction(IntEnum):
     """
@@ -322,16 +323,19 @@ class SnakeObservation(Dict):
     """
     Observation space for the snake environment
     """
-    encodings = {
-        SnakeState.EMPTY: 0,
-        **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
-        SnakeState.FOOD: 2,
-        SnakeState.OBSTACLE: 3
-    }
 
-    def __init__(self, shape, multi_channel=False, dtype=np.uint8):
+    def __init__(self, shape, multi_channel=False, direction_channel=False, dtype=np.uint8):
+        self.encodings = {
+            SnakeState.EMPTY: 0,
+            **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
+            SnakeState.FOOD: 2,
+            SnakeState.OBSTACLE: 3
+        } if not direction_channel else {
+            **{enum: i for i, enum in enumerate(SnakeState)}
+        }
+
         # -1 for binary representation except SnakeState.EMPTY
-        self.n_states = SnakeState.n_states_external()
+        self.n_states = SnakeState.n_states_external() if not direction_channel else SnakeState.n_states_internal()
         self.n_channels = 1 if not multi_channel else self.n_states - 1
         space_dict = {}
         if multi_channel:
