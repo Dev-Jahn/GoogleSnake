@@ -301,6 +301,13 @@ class SnakeGrid:
         """
         return np.argwhere(self.grid == SnakeState.FOOD).tolist()
 
+    def get_obstacles(self):
+        """
+        Get the positions of all the obstacles
+        :return: List of tuples of (row, col) of all food cells
+        """
+        return np.argwhere(self.grid == SnakeState.OBSTACLE).tolist()
+
     def is_snake(self, row, col):
         """
         Check if the given cell is part of the snake

@@ -100,6 +100,8 @@ class GUIConfig:
     SNAK_H = 30
     CONN_W = TILE_W - SNAK_W
     CONN_H = TILE_H - SNAK_H
+    LSPACE_W = 5
+    LSPACE_H = 5
 
     # Colors
     LIGHT_BLUE = (71, 117, 235)

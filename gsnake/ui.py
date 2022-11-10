@@ -47,6 +47,7 @@ class SnakeGUI(SnakeUI):
         self.draw_screen()
         self.draw_foods(state.get_foods())
         self.draw_snake(state.head)
+        self.draw_obstacle(state.get_obstacles())
         pygame.display.update()
         time.sleep(0.05)
 
@@ -70,6 +71,13 @@ class SnakeGUI(SnakeUI):
                 self._draw_body(cursor)
 
             cursor = cursor.next_node
+
+    def draw_obstacle(self, coords):
+        for row, col in coords:
+            pygame.draw.rect(surface=self.screen,
+                             color=GUIConfig.BLACK,
+                             rect=Rect(col * GUIConfig.TILE_W + GUIConfig.LSPACE_W, row * GUIConfig.TILE_H + GUIConfig.LSPACE_H,
+                                       GUIConfig.TILE_W - 2 * GUIConfig.LSPACE_W, GUIConfig.TILE_H - 2 * GUIConfig.LSPACE_H))
 
     def _draw_head(self, node):
         xtile = node.col * GUIConfig.TILE_W
