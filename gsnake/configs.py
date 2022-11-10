@@ -39,7 +39,7 @@ class GoogleSnakeConfig:
         self.cheese = cheese if not mixed else random.choice([True, False])
         # If True, map boarders are circularly connected
         self.loop = loop if not mixed else random.choice([True, False])
-        # If True, head and tail are flipped when snake eats food
+        # If True, head and tail are flipped when snake eats food (V)
         self.reverse = reverse if not mixed else random.choice([True, False])
         # If True, foods move linearly in a random direction
         self.moving = moving if not mixed else random.choice([True, False])
