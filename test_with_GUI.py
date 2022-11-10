@@ -21,7 +21,7 @@ config = GoogleSnakeConfig(
     multi_channel=True,
     reward_mode='time_constrained',
     reward_scale=1,
-    n_foods=3, wall=True, portal=False, cheese=False, loop=False, reverse=False, moving=False,
+    n_foods=3, wall=True, portal=False, cheese=False, loop=False, reverse=True, moving=False,
     yinyang=False, key=False, box=False, poison=False, transparent=False, flag=False, slough=False,
     peaceful=False, mixed=False
 )
