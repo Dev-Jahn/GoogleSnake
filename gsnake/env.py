@@ -56,6 +56,9 @@ class GoogleSnakeEnv(Env):
             # If wall option is enabled, generate an obstacle every odd number of foods eaten
             if self.config.wall and self.food_taken % 2 == 1:
                 self.state.generate_obstacles()
+            # head and tail are flipped when snake eats food
+            if self.config.reverse:
+                self.state.reverse_snake()
             # If portal option is enabled, save a portal marker in advance
             if self.config.portal:
                 raise NotImplementedError
