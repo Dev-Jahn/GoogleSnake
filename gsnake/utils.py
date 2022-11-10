@@ -227,9 +227,13 @@ class SnakeGrid:
     def generate_obstacles(self, n=1):
         """
         Generate obstacles in empty cells
+        There should be no obstacles around the 8 directions.
         :return: None
         """
-        self.grid[self._sample_empty(n)] = SnakeState.OBSTACLE
+        if not self.check_obstacles_available:  return
+        coords = self._sample_empty_obstacles(n=n)
+        for coord in coords:
+            self.grid[coord] = SnakeState.OBSTACLE
 
     def _sample_empty(self, n=1):
         """
@@ -237,7 +241,42 @@ class SnakeGrid:
         :return: Tuples of ((row1, col1), (row2, col2), ...)
         """
         empty = np.argwhere(self.grid == SnakeState.EMPTY)
-        return tuple(tuple(row) for row in empty[np.random.randint(len(empty), size=n), :])
+        return tuple(tuple(row) for row in empty[np.random.randint(len(empty), size=n)])
+
+    def _sample_empty_obstacles(self, n=1):
+        """
+        Sample a random empty cell from the grid for obstacles
+        :return: Tuples of ((row1, col1), (row2, col2), ...)
+        """
+        result = list()
+        generate_num = 0
+        H, W = self.config.grid_shape
+        px = [-1,0,1,1,1,0,-1,-1]
+        py = [-1,-1,-1,0,1,1,1,0]
+        while generate_num < n:
+            x, y, flag = np.random.randint(W), np.random.randint(H), 0
+            if not self.grid[y, x] == SnakeState.EMPTY:   continue
+            for i in range(8):
+                nx, ny = x + px[i], y + py[i]
+                if nx < 0 or nx >= W:   continue
+                if ny < 0 or ny >= H:   continue
+                if self.grid[ny, nx] == SnakeState.OBSTACLE:    flag = 1
+                if (ny, nx) in result:  flag = 1
+            if not flag:
+                result.append((y, x))
+                generate_num += 1
+        return tuple(result)
+
+    def check_obstacles_available(self):
+        """
+        There is a limit to the number of obstacles,
+        :return: Boolean
+        """
+        H, W = self.config.grid_shape
+        obstacles_num = len(np.argwhere(self.grid == SnakeState.OBSTACLE))
+        if H * W // (obstacles_num * 11)  == 0:     return True
+        else:                                       return False
+
 
     def closest_food_dist(self):
         """

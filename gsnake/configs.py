@@ -29,9 +29,9 @@ class GoogleSnakeConfig:
         # start position and direction of the snake
         self.start_pos = (self.height // 2, self.width // 4)
         self.start_dir = SnakeState.SNAKE_R
-        # Count of foods generated at once
+        # Count of foods generated at once (V)
         self.n_foods = n_foods if not mixed else random.choice([1, 3, 5])
-        # If True, the obstacles are generated every odd number of foods eaten
+        # If True, the obstacles are generated every odd number of foods eaten (V)
         self.wall = wall if not mixed else random.choice([True, False])
         # If True, total number of foods doubled and foods work as portals pairwise
         self.portal = portal if not mixed else random.choice([True, False])
