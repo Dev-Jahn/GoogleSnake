@@ -230,7 +230,7 @@ class SnakeGrid:
         There should be no obstacles around the 8 directions.
         :return: None
         """
-        if not self.check_obstacles_available:  return
+        if not self._check_obstacles_available:  return
         coords = self._sample_empty_obstacles(n=n)
         for coord in coords:
             self.grid[coord] = SnakeState.OBSTACLE
@@ -267,7 +267,7 @@ class SnakeGrid:
                 generate_num += 1
         return tuple(result)
 
-    def check_obstacles_available(self):
+    def _check_obstacles_available(self):
         """
         There is a limit to the number of obstacles,
         :return: Boolean
@@ -286,6 +286,39 @@ class SnakeGrid:
         food = np.argwhere(self.grid == SnakeState.FOOD)
         head = np.array(self.head.pos)
         return np.min(np.linalg.norm(food - head, axis=1))
+
+    def reverse_snake(self):
+        """
+        if reverse mode,
+        head and tail are flipped when snake eats food
+        """
+        cursor = self.tail
+        dir, dir_before = self.grid[cursor.pos], self.grid[cursor.pos]
+        while True:
+            cursor.direction = (dir + 1) % 4 + 1
+            self.grid[cursor.pos] = cursor.direction
+            cursor.prev_node, cursor.next_node = cursor.next_node, cursor.prev_node
+            cursor = cursor.next_node
+            if cursor == None:  break
+            dir, dir_before = dir_before, self.grid[cursor.pos]
+            print(dir, dir_before)
+        self.head, self.tail = self.tail, self.head
+        '''
+                if setting2 == 1:
+            width_, height_ = snake_tail_width, snake_tail_height
+            dir, dir_before = map[height_][width_][1], map[height_][width_][1]
+            while True:
+                map[height_][width_][1] = (dir + 1) % 4 + 1
+                if width_ == snake_head_width and height_ == snake_head_height:
+                    snake_tail_width, snake_head_width = snake_head_width, snake_tail_width
+                    snake_tail_height, snake_head_height = snake_head_height, snake_tail_height
+                    break
+                height_ = height_ + dir_height[dir_before]
+                width_ = width_ + dir_width[dir_before]
+                dir, dir_before = dir_before, map[height_][width_][1]
+        '''
+
+
 
     def get_snakes(self):
         """
@@ -363,6 +396,10 @@ class SnakeGrid:
 
         # Update grid cell value
         self.grid[new_head.pos] = self.head.direction
+
+        # update head previous node
+        self.head.next_node.direction = self.head.direction
+        self.grid[self.head.next_node.pos] = self.head.direction
 
 
 class SnakeObservation(Dict):
