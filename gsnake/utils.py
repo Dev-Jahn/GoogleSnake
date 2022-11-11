@@ -318,8 +318,6 @@ class SnakeGrid:
                 dir, dir_before = dir_before, map[height_][width_][1]
         '''
 
-
-
     def get_snakes(self):
         """
         Get the positions of all the snake cells
@@ -366,6 +364,8 @@ class SnakeGrid:
         :param col: Column of the head
         :return: True if the snake has died, False otherwise
         """
+        # If the next position of head is tail, snake lives.
+        if (row, col) == self.tail.pos:     return False
         return self._off_grid(row, col) or self.is_snake(row, col) or self.grid[row, col] == SnakeState.OBSTACLE
 
     def _off_grid(self, row, col):
