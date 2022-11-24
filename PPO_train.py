@@ -3,7 +3,6 @@ from stable_baselines3 import *
 from stable_baselines3.common.env_util import make_vec_env
 import wandb
 from wandb.integration.sb3 import WandbCallback
-
 from gsnake.env import GoogleSnakeEnv
 from gsnake.configs import GoogleSnakeConfig
 
@@ -32,7 +31,7 @@ run = wandb.init(
     monitor_gym=False
 )
 # Parallel environments
-env = make_vec_env("GoogleSnake-v1", n_envs=6, env_kwargs={'config': config})
+env = make_vec_env("GoogleSnake-v1", n_envs=10, env_kwargs={'config':config})
 policy_kwargs = {'normalize_images': False}
 model = PPO(
     "MultiInputPolicy",
@@ -41,5 +40,5 @@ model = PPO(
     verbose=0, tensorboard_log=f'runs/{run.id}')
 
 # for i in tqdm(range(10)):
-model.learn(total_timesteps=100_000, callback=WandbCallback(model_save_path=f'{name}.pt', verbose=2))
+model.learn(total_timesteps=1_000_000, callback=WandbCallback(model_save_path=f'{name}', verbose=2))
 run.finish()

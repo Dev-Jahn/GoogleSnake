@@ -11,17 +11,18 @@ from gsnake.configs import GoogleSnakeConfig
 register(
     id='GoogleSnake-v1',
     entry_point=GoogleSnakeEnv,
-    max_episode_steps=1000,
+    max_episode_steps=5000,
 )
 
 ####################################################################
 # Human evaluation
 ####################################################################
-model = PPO.load("PPO_MLP_time_food_only_nch_obsfix_50M.pt")
+model = PPO.load("PPO_2000_max_step_nch_50M/model")
 config = GoogleSnakeConfig(
     # reward_mode='basic',
     multi_channel=True,
     reward_mode='time_constrained_and_food',
+    direction_channel=False,
     n_foods=3
 )
 env = GoogleSnakeEnv(config, 42, "gui")
