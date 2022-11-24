@@ -48,11 +48,13 @@ class GoogleSnakeEnv(Env):
         eat_food = self.state.grid[new_head_pos] == SnakeState.FOOD.value
         dist = self.state.closest_food_dist()
         self.state.move(new_head, eat_food=eat_food)
+        self.state.remove_apple_node(new_head_pos)
         # Generate new food
         if eat_food:
             self.food_taken += 1
             reward += self.config.FOOD
-            if self.config.reward_mode == 'time_constrained_and_food':  reward += (self.food_taken - 1) * 2
+            if self.config.reward_mode == 'time_constrained_and_food':
+                reward += (self.food_taken - 1) * 2
             self.state.generate_food()
             # If wall option is enabled, generate an obstacle every odd number of foods eaten
             if self.config.wall and self.food_taken % 2 == 1:
@@ -72,6 +74,9 @@ class GoogleSnakeEnv(Env):
             reward += self.config.DIST
         elif self.state.closest_food_dist() - dist > 0:
             reward -= self.config.DIST
+
+        if self.config.moving:
+            self.state.move_apple()
 
         return self.observation_space.convert(self.state), reward, False, {}
 
