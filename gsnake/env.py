@@ -36,6 +36,7 @@ class GoogleSnakeEnv(Env):
         assert self.action_space.contains(action)
         # Get the new head position
         new_head_pos = SnakeAction.absolute_position(self.state.head.direction, action)(*self.state.head.pos)
+        if self.config.loop:    new_head_pos = (new_head_pos[0] % self.config.grid_shape[0], new_head_pos[1] % self.config.grid_shape[1])
         # If the snake is dead, terminate the episode with a negative reward
         if self.state.is_dead(*new_head_pos):
             self.state.reset()

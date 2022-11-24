@@ -88,6 +88,9 @@ class SnakeAction(IntEnum):
         else:
             raise ValueError
 
+    @staticmethod
+    def head_loop_position(row, col, H, W):
+        return (row%H, col%W)
 
 class OneHotBox(Box):
     """
