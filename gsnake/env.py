@@ -13,7 +13,7 @@ class GoogleSnakeEnv(Env):
         self.config = config
         self.seed = seed
         self.action_space = spaces.Discrete(n=3)
-        self.observation_space = SnakeObservation(self.config.grid_shape, multi_channel=self.config.multi_channel)
+        self.observation_space = SnakeObservation(self.config.grid_shape, multi_channel=self.config.multi_channel, direction_channel=self.config.direction_channel)
         self.state = SnakeGrid(self.config, seed=seed)
         self.food_taken = 0
 
@@ -36,6 +36,7 @@ class GoogleSnakeEnv(Env):
         assert self.action_space.contains(action)
         # Get the new head position
         new_head_pos = SnakeAction.absolute_position(self.state.head.direction, action)(*self.state.head.pos)
+        if self.config.loop:    new_head_pos = (new_head_pos[0] % self.config.grid_shape[0], new_head_pos[1] % self.config.grid_shape[1])
         # If the snake is dead, terminate the episode with a negative reward
         if self.state.is_dead(*new_head_pos):
             self.state.reset()
@@ -47,14 +48,20 @@ class GoogleSnakeEnv(Env):
         eat_food = self.state.grid[new_head_pos] == SnakeState.FOOD.value
         dist = self.state.closest_food_dist()
         self.state.move(new_head, eat_food=eat_food)
+        self.state.remove_apple_node(new_head_pos)
         # Generate new food
         if eat_food:
             self.food_taken += 1
             reward += self.config.FOOD
+            if self.config.reward_mode == 'time_constrained_and_food':
+                reward += (self.food_taken - 1) * 2
             self.state.generate_food()
             # If wall option is enabled, generate an obstacle every odd number of foods eaten
             if self.config.wall and self.food_taken % 2 == 1:
                 self.state.generate_obstacles()
+            # head and tail are flipped when snake eats food
+            if self.config.reverse:
+                self.state.reverse_snake()
             # If portal option is enabled, save a portal marker in advance
             if self.config.portal:
                 raise NotImplementedError
@@ -67,6 +74,9 @@ class GoogleSnakeEnv(Env):
             reward += self.config.DIST
         elif self.state.closest_food_dist() - dist > 0:
             reward -= self.config.DIST
+
+        if self.config.moving:
+            self.state.move_apple()
 
         return self.observation_space.convert(self.state), reward, False, {}
 

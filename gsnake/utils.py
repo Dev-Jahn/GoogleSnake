@@ -43,6 +43,7 @@ class SnakeState(IntEnum):
         return len([enum for enum in SnakeState if not enum.name.startswith('SNAKE')]) + 1
 
 
+
 @unique
 class SnakeAction(IntEnum):
     """
@@ -165,6 +166,31 @@ class SnakeNode:
         if self.next_node is not None:
             self.next_node.prev_node = None
 
+class AppleNode:
+    """
+        Node of the apple
+    """
+    def __init__(self, row, col, direction):
+        self.pos = row, col
+        self.direction = direction
+        self.prev_node = None
+        self.next_node = None
+
+    def __add__(self, other):
+        """
+        Overloaded operator +
+        Attaches two nodes together
+        Calculate the direction of attached node based on direction of the current node and position of the other node
+        :param other: The other node
+        :return: The other node
+        """
+        other.prev_node = self
+        self.next_node = other
+        return other
+
+    def __repr__(self):
+        return f"Apple<{self.row}, {self.col}, {str(self.direction)}>"
+
 
 class SnakeGrid:
     """
@@ -181,6 +207,9 @@ class SnakeGrid:
         self.head = None
         self.tail = None
 
+        self.first_food = None
+        self.last_food = None
+
     def reset(self):
         """
         Reset the grid to all empty and spawn objects
@@ -188,7 +217,7 @@ class SnakeGrid:
         """
         self.grid.fill(SnakeState.EMPTY)
         self._init_snake()
-        self.generate_food(n=self.config.n_foods)
+        self.generate_food(n=self.config.n_foods, new=True)
 
     def _init_snake(self):
         """
@@ -214,21 +243,58 @@ class SnakeGrid:
             self.grid[cursor.pos] = cursor.direction
             cursor = cursor.next_node
 
-    def generate_food(self, n=1):
+    def generate_food(self, n=1, new=False):
         """
         Generate food in an empty cell
         :return: None
         """
         coords = self._sample_empty(n=n)
-        for coord in coords:
-            self.grid[coord] = SnakeState.FOOD
+        if (self.last_food is not None) and (not new):
+            cursor = self.last_food
+            for coord in coords:
+                self.grid[coord] = SnakeState.FOOD
+                cursor = cursor + AppleNode(*coord, direction=np.random.randint(1, 5))
+            self.last_food = cursor
+        else:
+            self.grid[coords[0]] = SnakeState.FOOD
+            self.first_food = AppleNode(*coords[0], direction=np.random.randint(1, 5))
+            cursor = self.first_food
+            for coord in coords[1:]:
+                self.grid[coord] = SnakeState.FOOD
+                cursor = cursor + AppleNode(*coord, direction=np.random.randint(1, 5))
+            self.last_food = cursor
+
+    def move_apple(self):
+        cursor = self.first_food
+        while cursor is not None:
+            plus_row = [0,-1,0,1,0]
+            plus_col = [0,0,1,0,-1]
+
+            dir = cursor.direction
+            reverse_dir = (cursor.direction + 1) % 4 + 1
+            new_pos = cursor.pos[0] + plus_row[dir], cursor.pos[1] + plus_col[dir]
+            new_reverse_pos = cursor.pos[0] + plus_row[reverse_dir], cursor.pos[1] + plus_col[reverse_dir]
+            if not self._off_grid(*new_pos) and self.grid[new_pos] == SnakeState.EMPTY:
+                self.grid[cursor.pos] = SnakeState.EMPTY
+                self.grid[new_pos] = SnakeState.FOOD
+                cursor.pos = new_pos
+            elif not self._off_grid(*new_reverse_pos) and self.grid[new_reverse_pos] == SnakeState.EMPTY:
+                cursor.direction = reverse_dir
+                self.grid[cursor.pos] = SnakeState.EMPTY
+                self.grid[new_reverse_pos] = SnakeState.FOOD
+                cursor.pos = new_reverse_pos
+            cursor = cursor.next_node
 
     def generate_obstacles(self, n=1):
         """
         Generate obstacles in empty cells
+        There should be no obstacles around the 8 directions.
         :return: None
         """
-        self.grid[self._sample_empty(n)] = SnakeState.OBSTACLE
+        if not self._check_obstacles_available:  return
+        coords = self._sample_empty_obstacles(n=n)
+        for coord in coords:
+            self.grid[coord] = SnakeState.OBSTACLE
 
     def _sample_empty(self, n=1):
         """
@@ -236,7 +302,42 @@ class SnakeGrid:
         :return: Tuples of ((row1, col1), (row2, col2), ...)
         """
         empty = np.argwhere(self.grid == SnakeState.EMPTY)
-        return tuple(tuple(row) for row in empty[np.random.randint(len(empty), size=n), :])
+        return tuple(tuple(row) for row in empty[np.random.randint(len(empty), size=n)])
+
+    def _sample_empty_obstacles(self, n=1):
+        """
+        Sample a random empty cell from the grid for obstacles
+        :return: Tuples of ((row1, col1), (row2, col2), ...)
+        """
+        result = list()
+        generate_num = 0
+        H, W = self.config.grid_shape
+        px = [-1,0,1,1,1,0,-1,-1]
+        py = [-1,-1,-1,0,1,1,1,0]
+        while generate_num < n:
+            x, y, flag = np.random.randint(W), np.random.randint(H), 0
+            if not self.grid[y, x] == SnakeState.EMPTY:   continue
+            for i in range(8):
+                nx, ny = x + px[i], y + py[i]
+                if nx < 0 or nx >= W:   continue
+                if ny < 0 or ny >= H:   continue
+                if self.grid[ny, nx] == SnakeState.OBSTACLE:    flag = 1
+                if (ny, nx) in result:  flag = 1
+            if not flag:
+                result.append((y, x))
+                generate_num += 1
+        return tuple(result)
+
+    def _check_obstacles_available(self):
+        """
+        There is a limit to the number of obstacles,
+        :return: Boolean
+        """
+        H, W = self.config.grid_shape
+        obstacles_num = len(np.argwhere(self.grid == SnakeState.OBSTACLE))
+        if H * W // (obstacles_num * 11)  == 0:     return True
+        else:                                       return False
+
 
     def closest_food_dist(self):
         """
@@ -246,6 +347,23 @@ class SnakeGrid:
         food = np.argwhere(self.grid == SnakeState.FOOD)
         head = np.array(self.head.pos)
         return np.min(np.linalg.norm(food - head, axis=1))
+
+    def reverse_snake(self):
+        """
+        if reverse mode,
+        head and tail are flipped when snake eats food
+        """
+        cursor = self.tail
+        dir, dir_before = self.grid[cursor.pos], self.grid[cursor.pos]
+        while True:
+            cursor.direction = (dir + 1) % 4 + 1
+            self.grid[cursor.pos] = cursor.direction
+            cursor.prev_node, cursor.next_node = cursor.next_node, cursor.prev_node
+            cursor = cursor.next_node
+            if cursor == None:  break
+            dir, dir_before = dir_before, self.grid[cursor.pos]
+            print(dir, dir_before)
+        self.head, self.tail = self.tail, self.head
 
     def get_snakes(self):
         """
@@ -260,6 +378,13 @@ class SnakeGrid:
         :return: List of tuples of (row, col) of all food cells
         """
         return np.argwhere(self.grid == SnakeState.FOOD).tolist()
+
+    def get_obstacles(self):
+        """
+        Get the positions of all the obstacles
+        :return: List of tuples of (row, col) of all food cells
+        """
+        return np.argwhere(self.grid == SnakeState.OBSTACLE).tolist()
 
     def is_snake(self, row, col):
         """
@@ -286,6 +411,8 @@ class SnakeGrid:
         :param col: Column of the head
         :return: True if the snake has died, False otherwise
         """
+        # If the next position of head is tail, snake lives.
+        if (row, col) == self.tail.pos:     return False
         return self._off_grid(row, col) or self.is_snake(row, col) or self.grid[row, col] == SnakeState.OBSTACLE
 
     def _off_grid(self, row, col):
@@ -317,21 +444,45 @@ class SnakeGrid:
         # Update grid cell value
         self.grid[new_head.pos] = self.head.direction
 
+        # update head previous node
+        self.head.next_node.direction = self.head.direction
+        self.grid[self.head.next_node.pos] = self.head.direction
+
+    def remove_apple_node(self, position):
+        cursor = self.first_food
+        while cursor is not None:
+            if cursor.pos == position:
+                self.grid[position] = SnakeState.EMPTY
+                if cursor.next_node is None:
+                    cursor.prev_node.next_node = None
+                    self.last_food = cursor.prev_node
+                elif cursor.prev_node is None:
+                    cursor.next_node.prev_node = None
+                    self.first_food = cursor.next_node
+                else:
+                    cursor.prev_node.next_node = cursor.next_node
+                    cursor.next_node.prev_node = cursor.prev_node
+                break
+            cursor = cursor.next_node
+
 
 class SnakeObservation(Dict):
     """
     Observation space for the snake environment
     """
-    encodings = {
-        SnakeState.EMPTY: 0,
-        **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
-        SnakeState.FOOD: 2,
-        SnakeState.OBSTACLE: 3
-    }
 
-    def __init__(self, shape, multi_channel=False, dtype=np.uint8):
+    def __init__(self, shape, multi_channel=False, direction_channel=False, dtype=np.uint8):
+        self.encodings = {
+            SnakeState.EMPTY: 0,
+            **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
+            SnakeState.FOOD: 2,
+            SnakeState.OBSTACLE: 3
+        } if not direction_channel else {
+            **{enum: i for i, enum in enumerate(SnakeState)}
+        }
+
         # -1 for binary representation except SnakeState.EMPTY
-        self.n_states = SnakeState.n_states_external()
+        self.n_states = SnakeState.n_states_external() if not direction_channel else SnakeState.n_states_internal()
         self.n_channels = 1 if not multi_channel else self.n_states - 1
         space_dict = {}
         if multi_channel:
@@ -343,7 +494,12 @@ class SnakeObservation(Dict):
         space_dict.update(OrderedDict({
             'head_row': OneHotBox(shape[1]),
             'head_col': OneHotBox(shape[2]),
-            'direction': OneHotBox(4)
+            'head_direction': OneHotBox(4)
+        }))
+        space_dict.update(OrderedDict({
+            'tail_row': OneHotBox(shape[1]),
+            'tail_col': OneHotBox(shape[2]),
+            'tail_direction': OneHotBox(4)
         }))
         super(SnakeObservation, self).__init__(space_dict)
         self.dtype = dtype
@@ -377,12 +533,18 @@ class SnakeObservation(Dict):
             'grid': obs,
             'head_row': np.eye(state.grid.shape[0], dtype=self.dtype)[state.head.pos[0]],
             'head_col': np.eye(state.grid.shape[1], dtype=self.dtype)[state.head.pos[1]],
-            'direction': np.eye(4, dtype=self.dtype)[state.head.direction - min(SnakeState)]
+            'head_direction': np.eye(4, dtype=self.dtype)[state.head.direction - min(SnakeState)],
+            'tail_row': np.eye(state.grid.shape[0], dtype=self.dtype)[state.tail.pos[0]],
+            'tail_col': np.eye(state.grid.shape[1], dtype=self.dtype)[state.tail.pos[1]],
+            'tail_direction': np.eye(4, dtype=self.dtype)[state.tail.direction - min(SnakeState)]
         })
         assert self['grid'].contains(obs_dict['grid']), f'grid does not match with the observation space'
         assert self['head_row'].contains(obs_dict['head_row']), f'head_row does not match with the observation space'
         assert self['head_col'].contains(obs_dict['head_col']), f'head_col does not match with the observation space'
-        assert self['direction'].contains(obs_dict['direction']), f'direction does not match with the observation space'
+        assert self['head_direction'].contains(obs_dict['head_direction']), f'direction does not match with the observation space'
+        assert self['tail_row'].contains(obs_dict['tail_row']), f'head_row does not match with the observation space'
+        assert self['tail_col'].contains(obs_dict['tail_col']), f'head_col does not match with the observation space'
+        assert self['tail_direction'].contains(obs_dict['tail_direction']), f'direction does not match with the observation space'
         assert self.contains(obs_dict), f'Observation does not match with the observation space'
 
         return obs_dict

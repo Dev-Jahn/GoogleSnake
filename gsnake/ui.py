@@ -47,6 +47,7 @@ class SnakeGUI(SnakeUI):
         self.draw_screen()
         self.draw_foods(state.get_foods())
         self.draw_snake(state.head)
+        self.draw_obstacle(state.get_obstacles())
         pygame.display.update()
         time.sleep(0.05)
 
@@ -70,6 +71,13 @@ class SnakeGUI(SnakeUI):
                 self._draw_body(cursor)
 
             cursor = cursor.next_node
+
+    def draw_obstacle(self, coords):
+        for row, col in coords:
+            pygame.draw.rect(surface=self.screen,
+                             color=GUIConfig.BLACK,
+                             rect=Rect(col * GUIConfig.TILE_W + GUIConfig.LSPACE_W, row * GUIConfig.TILE_H + GUIConfig.LSPACE_H,
+                                       GUIConfig.TILE_W - 2 * GUIConfig.LSPACE_W, GUIConfig.TILE_H - 2 * GUIConfig.LSPACE_H))
 
     def _draw_head(self, node):
         xtile = node.col * GUIConfig.TILE_W
@@ -128,35 +136,45 @@ class SnakeGUI(SnakeUI):
         # if node.direction in (SnakeState.SNAKE_U, SnakeState.SNAKE_D):
         #     left += GUIConfig.CONN_W // 2
         #     width -= GUIConfig.CONN_W
+        pygame.draw.rect(surface=self.screen, color=GUIConfig.LIGHT_BLUE,
+                         rect=Rect(xtile + GUIConfig.CONN_W // 2,
+                                   ytile + GUIConfig.CONN_H // 2,
+                                   GUIConfig.SNAK_W,
+                                   GUIConfig.SNAK_H))
 
-        if node.direction == SnakeState.SNAKE_U:
-            pygame.draw.rect(surface=self.screen,
-                             color=GUIConfig.LIGHT_BLUE,
-                             rect=Rect(xtile + GUIConfig.CONN_W // 2,
-                                       ytile - GUIConfig.CONN_H // 2,
-                                       GUIConfig.SNAK_W,
-                                       GUIConfig.SNAK_H + GUIConfig.CONN_H))
-        if node.direction == SnakeState.SNAKE_R:
-            pygame.draw.rect(surface=self.screen,
-                             color=GUIConfig.LIGHT_BLUE,
-                             rect=Rect(xtile + GUIConfig.CONN_W // 2,
-                                       ytile + GUIConfig.CONN_H // 2,
-                                       GUIConfig.SNAK_W + GUIConfig.CONN_W,
-                                       GUIConfig.SNAK_H))
-        if node.direction == SnakeState.SNAKE_D:
-            pygame.draw.rect(surface=self.screen,
-                             color=GUIConfig.LIGHT_BLUE,
-                             rect=Rect(xtile + GUIConfig.CONN_W // 2,
-                                       ytile + GUIConfig.CONN_H // 2,
-                                       GUIConfig.SNAK_W,
-                                       GUIConfig.SNAK_H + GUIConfig.CONN_H))
-        if node.direction == SnakeState.SNAKE_L:
-            pygame.draw.rect(surface=self.screen,
-                             color=GUIConfig.LIGHT_BLUE,
-                             rect=Rect(xtile - GUIConfig.CONN_W // 2,
-                                       ytile + GUIConfig.CONN_H // 2,
-                                       GUIConfig.SNAK_W + GUIConfig.CONN_W,
-                                       GUIConfig.SNAK_H))
+        dir = [node.direction]
+        if node.next_node is not None:
+            dir.append((node.next_node.direction + 1) % 4 + 1)
+
+        for d in dir:
+            if d == SnakeState.SNAKE_U:
+                pygame.draw.rect(surface=self.screen,
+                                 color=GUIConfig.LIGHT_BLUE,
+                                 rect=Rect(xtile + GUIConfig.CONN_W // 2,
+                                           ytile,
+                                           GUIConfig.SNAK_W,
+                                           GUIConfig.CONN_H // 2))
+            if d == SnakeState.SNAKE_R:
+                pygame.draw.rect(surface=self.screen,
+                                 color=GUIConfig.LIGHT_BLUE,
+                                 rect=Rect(xtile + GUIConfig.SNAK_W + GUIConfig.CONN_W // 2,
+                                           ytile + GUIConfig.CONN_H // 2,
+                                           GUIConfig.CONN_W // 2,
+                                           GUIConfig.SNAK_H))
+            if d == SnakeState.SNAKE_D:
+                pygame.draw.rect(surface=self.screen,
+                                 color=GUIConfig.LIGHT_BLUE,
+                                 rect=Rect(xtile + GUIConfig.CONN_W // 2,
+                                           ytile + GUIConfig.SNAK_H + GUIConfig.CONN_H // 2,
+                                           GUIConfig.SNAK_W,
+                                           GUIConfig.CONN_H // 2))
+            if d == SnakeState.SNAKE_L:
+                pygame.draw.rect(surface=self.screen,
+                                 color=GUIConfig.LIGHT_BLUE,
+                                 rect=Rect(xtile,
+                                           ytile + GUIConfig.CONN_H // 2,
+                                           GUIConfig.CONN_W // 2,
+                                           GUIConfig.SNAK_H))
 
     def _draw_tail(self, node):
         pass

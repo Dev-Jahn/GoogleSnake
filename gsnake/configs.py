@@ -8,9 +8,9 @@ class GoogleSnakeConfig:
     """
     Class for Game Configurations
     """
-    _REWARDS = Literal['basic', 'time_constrained']
+    _REWARDS = Literal['basic', 'time_constrained', 'time_constrained_and_food']
 
-    def __init__(self, width=15, height=10, multi_channel=False, reward_mode: _REWARDS = 'basic', reward_scale=1.0,
+    def __init__(self, width=15, height=10, multi_channel=False, direction_channel=False, reward_mode: _REWARDS = 'basic', reward_scale=1.0,
                  n_foods=1, wall=False, portal=False, cheese=False, loop=False, reverse=False, moving=False,
                  yinyang=False, key=False, box=False, poison=False, transparent=False, flag=False, slough=False,
                  peaceful=False, mixed=False, seed=42, *args, **kwargs):
@@ -23,21 +23,23 @@ class GoogleSnakeConfig:
 
         # whether to use multichannel one-hot or single channel image for observation
         self.multi_channel = multi_channel
+        # every direction has its own channel
+        self.direction_channel = direction_channel
 
         # start position and direction of the snake
         self.start_pos = (self.height // 2, self.width // 4)
         self.start_dir = SnakeState.SNAKE_R
-        # Count of foods generated at once
+        # Count of foods generated at once (V)
         self.n_foods = n_foods if not mixed else random.choice([1, 3, 5])
-        # If True, the obstacles are generated every odd number of foods eaten
+        # If True, the obstacles are generated every odd number of foods eaten (V)
         self.wall = wall if not mixed else random.choice([True, False])
         # If True, total number of foods doubled and foods work as portals pairwise
         self.portal = portal if not mixed else random.choice([True, False])
         # If True, snake body becomes penetrable alternately
         self.cheese = cheese if not mixed else random.choice([True, False])
-        # If True, map boarders are circularly connected
+        # If True, map boarders are circularly connected (V)
         self.loop = loop if not mixed else random.choice([True, False])
-        # If True, head and tail are flipped when snake eats food
+        # If True, head and tail are flipped when snake eats food (V)
         self.reverse = reverse if not mixed else random.choice([True, False])
         # If True, foods move linearly in a random direction
         self.moving = moving if not mixed else random.choice([True, False])
@@ -58,6 +60,7 @@ class GoogleSnakeConfig:
         # If True, do not die with any collision. Reaching certain length will win the game
         self.peaceful = peaceful if not mixed else random.choice([True, False])
 
+        self.reward_mode = reward_mode
         options = get_args(self._REWARDS)
         assert reward_mode in options, f"'{reward_mode}' is not in {options}"
         if reward_mode == 'basic':
@@ -70,6 +73,12 @@ class GoogleSnakeConfig:
             self.FOOD = 100 * reward_scale
             self.IDLE = -1 * reward_scale
             self.DIST = 2 * reward_scale
+        elif reward_mode == 'time_constrained_and_food':
+            self.DEATH = 0
+            self.FOOD = (self.height + self.width) * 2
+            self.IDLE = -1
+            self.DIST = 0
+
 
     @property
     def grid_shape(self):
@@ -91,6 +100,8 @@ class GUIConfig:
     SNAK_H = 30
     CONN_W = TILE_W - SNAK_W
     CONN_H = TILE_H - SNAK_H
+    LSPACE_W = 5
+    LSPACE_H = 5
 
     # Colors
     LIGHT_BLUE = (71, 117, 235)
