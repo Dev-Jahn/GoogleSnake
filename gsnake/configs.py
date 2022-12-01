@@ -1,3 +1,4 @@
+import os
 import random
 from typing import Literal, get_args
 
@@ -10,7 +11,8 @@ class GoogleSnakeConfig:
     """
     _REWARDS = Literal['basic', 'time_constrained', 'time_constrained_and_food']
 
-    def __init__(self, width=15, height=10, multi_channel=False, direction_channel=False, reward_mode: _REWARDS = 'basic', reward_scale=1.0,
+    def __init__(self, width=15, height=10, multi_channel=False, direction_channel=False,
+                 reward_mode: _REWARDS = 'basic', reward_scale=1.0,
                  n_foods=1, wall=False, portal=False, cheese=False, loop=False, reverse=False, moving=False,
                  yinyang=False, key=False, box=False, poison=False, transparent=False, flag=False, slough=False,
                  peaceful=False, mixed=False, seed=42, *args, **kwargs):
@@ -79,7 +81,6 @@ class GoogleSnakeConfig:
             self.IDLE = -1
             self.DIST = 0
 
-
     @property
     def grid_shape(self):
         return self.height, self.width
@@ -90,8 +91,9 @@ class GUIConfig:
     CAPTION = "Google Snake"
 
     # PATHS
-    PATH_ICON = 'snake_logo.png'
-    PATH_APPLE = 'apple.png'
+    RESOURCE_ROOT = 'resource'
+    PATH_ICON = os.path.join(RESOURCE_ROOT, 'snake_logo.png')
+    PATH_APPLE = os.path.join(RESOURCE_ROOT, 'apple.png')
 
     # Pixel sizes of elements
     TILE_W = 50

@@ -208,11 +208,11 @@ if __name__ == '__main__':
 
     # Title and Icon (flaticon.com)
     pygame.display.set_caption("snake_game")
-    icon = pygame.image.load('snake_logo.png')
+    icon = pygame.image.load('../resource/snake_logo.png')
     pygame.display.set_icon(icon)
 
     # Img setting
-    appleImg = pygame.image.load('apple.png')
+    appleImg = pygame.image.load('../resource/apple.png')
     appleImg = pygame.transform.scale(appleImg, (tile_width, tile_height))
 
     reset_game()
