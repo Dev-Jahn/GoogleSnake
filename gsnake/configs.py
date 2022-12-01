@@ -104,6 +104,7 @@ class GUIConfig:
     LSPACE_H = 5
 
     # Colors
+    RED = (128, 0, 0)
     LIGHT_BLUE = (71, 117, 235)
     POISON_GREEN = (0, 128, 0)
     BLACK = (0, 0, 0)

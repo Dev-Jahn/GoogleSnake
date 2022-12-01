@@ -47,6 +47,8 @@ class SnakeGUI(SnakeUI):
 
     def render(self, state):
         self.draw_screen()
+        if state.next_portal_position is not None:
+            self.draw_portal(state.next_portal_position)
         self.draw_foods(state.get_foods(), anti_food=False)
         self.draw_foods(state.get_anti_foods(), anti_food=True)
         self.draw_snake(state.head, state.poisoned)
@@ -59,6 +61,22 @@ class SnakeGUI(SnakeUI):
         for row, col in coords:
             if anti_food:   self.screen.blit(self.image_cache[SnakeState.ANTI_FOOD], (col * GUIConfig.TILE_W, row * GUIConfig.TILE_H))
             else:           self.screen.blit(self.image_cache[SnakeState.FOOD], (col * GUIConfig.TILE_W, row * GUIConfig.TILE_H))
+
+    def draw_portal(self, coord):
+        xtile = coord[1] * GUIConfig.TILE_W
+        ytile = coord[0] * GUIConfig.TILE_H
+        pygame.draw.rect(surface=self.screen,
+                         color=GUIConfig.RED,
+                         rect=Rect(xtile, ytile, GUIConfig.LSPACE_W, GUIConfig.TILE_H))
+        pygame.draw.rect(surface=self.screen,
+                         color=GUIConfig.RED,
+                         rect=Rect(xtile, ytile, GUIConfig.TILE_W, GUIConfig.LSPACE_H))
+        pygame.draw.rect(surface=self.screen,
+                         color=GUIConfig.RED,
+                         rect=Rect(xtile + GUIConfig.TILE_W - GUIConfig.LSPACE_W, ytile, GUIConfig.LSPACE_W, GUIConfig.TILE_H))
+        pygame.draw.rect(surface=self.screen,
+                         color=GUIConfig.RED,
+                         rect=Rect(xtile, ytile + GUIConfig.TILE_H - GUIConfig.LSPACE_H, GUIConfig.TILE_W, GUIConfig.LSPACE_H))
 
     def draw_snake(self, head: SnakeNode, poisoned):
         cursor = head
