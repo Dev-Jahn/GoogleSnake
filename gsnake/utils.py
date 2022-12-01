@@ -12,13 +12,16 @@ class SnakeState(IntEnum):
     May add more states in the future
     Start from 1 for compatibility
     """
+    # SNAKE direction is always
     SNAKE_U = 1
     SNAKE_R = auto()
     SNAKE_D = auto()
     SNAKE_L = auto()
-    EMPTY = auto()
     FOOD = auto()
+    ANTI_FOOD = auto()
     OBSTACLE = auto()
+    EMPTY = auto()
+
 
     def __str__(self):
         return f'{self.name}<{self.value}>'
@@ -135,7 +138,7 @@ class SnakeNode:
         :return: The other node
         """
         assert isinstance(other, SnakeNode)
-        assert self.row == other.row or self.col == other.col
+        # assert self.row == other.row or self.col == other.col
         if self.row == other.row:
             if self.col < other.col:
                 other.direction = SnakeState.SNAKE_L
@@ -170,11 +173,13 @@ class AppleNode:
     """
         Node of the apple
     """
-    def __init__(self, row, col, direction):
-        self.pos = row, col
+    def __init__(self, direction, anti_direction, *pos):
         self.direction = direction
+        self.anti_direction = anti_direction
         self.prev_node = None
         self.next_node = None
+        self.pos = pos[0:2]
+        self.anti_pos = pos[2:]
 
     def __add__(self, other):
         """
@@ -189,7 +194,7 @@ class AppleNode:
         return other
 
     def __repr__(self):
-        return f"Apple<{self.row}, {self.col}, {str(self.direction)}>"
+        return f"Apple<{self.pos}, {self.anti_pos}, {str(self.direction)}>"
 
 
 class SnakeGrid:
@@ -203,18 +208,37 @@ class SnakeGrid:
         self.seed = seed
         self.grid = np.zeros(config.grid_shape, dtype=np.uint8)
 
+        self.poisoned = False
+        self.poison_count = 0
+        self.poison_count_max = 5
+
         # Cursor of the head and tail SnakeNode
         self.head = None
         self.tail = None
 
+        # Cursor of the head and tail apple(food)
         self.first_food = None
         self.last_food = None
+
+        self.anti_food_check = self.config.portal or self.config.poison
+        self.next_portal_position = None
 
     def reset(self):
         """
         Reset the grid to all empty and spawn objects
         :return:
         """
+        self.poisoned = False
+        self.poison_count = 0
+
+        self.head = None
+        self.tail = None
+
+        self.first_food = None
+        self.last_food = None
+
+        self.next_portal_position = None
+
         self.grid.fill(SnakeState.EMPTY)
         self._init_snake()
         self.generate_food(n=self.config.n_foods, new=True)
@@ -248,42 +272,50 @@ class SnakeGrid:
         Generate food in an empty cell
         :return: None
         """
-        coords = self._sample_empty(n=n)
+        coords = self._sample_empty(n=2 * n if self.config.portal or self.config.poison else n)
+        if self.anti_food_check:    coords = tuple(x + y for x, y in zip(coords[0::2], coords[1::2]))
+
         if (self.last_food is not None) and (not new):
+            self.grid[coords[0][0:2]] = SnakeState.FOOD
+            if self.anti_food_check:    self.grid[coords[0][2:4]] = SnakeState.ANTI_FOOD
             cursor = self.last_food
-            for coord in coords:
-                self.grid[coord] = SnakeState.FOOD
-                cursor = cursor + AppleNode(*coord, direction=np.random.randint(1, 5))
-            self.last_food = cursor
+            cursor = cursor + AppleNode(np.random.randint(1, 5), np.random.randint(1, 5), *coords[0])
         else:
-            self.grid[coords[0]] = SnakeState.FOOD
-            self.first_food = AppleNode(*coords[0], direction=np.random.randint(1, 5))
+            self.grid[coords[0][0:2]] = SnakeState.FOOD
+            if self.anti_food_check:    self.grid[coords[0][2:4]] = SnakeState.ANTI_FOOD
+            self.first_food = AppleNode(np.random.randint(1, 5), np.random.randint(1, 5), *coords[0])
             cursor = self.first_food
-            for coord in coords[1:]:
-                self.grid[coord] = SnakeState.FOOD
-                cursor = cursor + AppleNode(*coord, direction=np.random.randint(1, 5))
-            self.last_food = cursor
+
+        for coord in coords[1:]:
+            if self.anti_food_check:    self.grid[coord[2:4]] = SnakeState.ANTI_FOOD
+            self.grid[coord[0:2]] = SnakeState.FOOD
+            cursor = cursor + AppleNode(np.random.randint(1, 5), np.random.randint(1, 5), *coord)
+        self.last_food = cursor
 
     def move_apple(self):
         cursor = self.first_food
         while cursor is not None:
-            plus_row = [0,-1,0,1,0]
-            plus_col = [0,0,1,0,-1]
-
-            dir = cursor.direction
-            reverse_dir = (cursor.direction + 1) % 4 + 1
-            new_pos = cursor.pos[0] + plus_row[dir], cursor.pos[1] + plus_col[dir]
-            new_reverse_pos = cursor.pos[0] + plus_row[reverse_dir], cursor.pos[1] + plus_col[reverse_dir]
-            if not self._off_grid(*new_pos) and self.grid[new_pos] == SnakeState.EMPTY:
-                self.grid[cursor.pos] = SnakeState.EMPTY
-                self.grid[new_pos] = SnakeState.FOOD
-                cursor.pos = new_pos
-            elif not self._off_grid(*new_reverse_pos) and self.grid[new_reverse_pos] == SnakeState.EMPTY:
-                cursor.direction = reverse_dir
-                self.grid[cursor.pos] = SnakeState.EMPTY
-                self.grid[new_reverse_pos] = SnakeState.FOOD
-                cursor.pos = new_reverse_pos
+            cursor.direction, cursor.pos = self.next_apple_position(cursor.direction, cursor.pos, anti=False)
+            if self.config.portal or self.config.poison:
+                cursor.anti_direction, cursor.anti_pos = self.next_apple_position(cursor.anti_direction, cursor.anti_pos, anti=True)
             cursor = cursor.next_node
+
+    def next_apple_position(self, direction, pos, anti=False):
+        plus_row = [0, -1, 0, 1, 0]
+        plus_col = [0, 0, 1, 0, -1]
+
+        dir, reverse_dir = direction, (direction + 1) % 4 + 1
+        new_pos = pos[0] + plus_row[dir], pos[1] + plus_col[dir]
+        new_reverse_pos = pos[0] + plus_row[reverse_dir], pos[1] + plus_col[reverse_dir]
+        if not self._off_grid(*new_pos) and self.grid[new_pos] == SnakeState.EMPTY:
+            self.grid[pos] = SnakeState.EMPTY
+            self.grid[new_pos] = SnakeState.ANTI_FOOD if anti else SnakeState.FOOD
+            return dir, new_pos
+        elif not self._off_grid(*new_reverse_pos) and self.grid[new_reverse_pos] == SnakeState.EMPTY:
+            self.grid[pos] = SnakeState.EMPTY
+            self.grid[new_reverse_pos] = SnakeState.ANTI_FOOD if anti else SnakeState.FOOD
+            return reverse_dir, new_reverse_pos
+        return dir, pos
 
     def generate_obstacles(self, n=1):
         """
@@ -339,15 +371,6 @@ class SnakeGrid:
         else:                                       return False
 
 
-    def closest_food_dist(self):
-        """
-        Find distance between the closest food to the head of the snake
-        :return: Euclidean distance between the head and the closest food
-        """
-        food = np.argwhere(self.grid == SnakeState.FOOD)
-        head = np.array(self.head.pos)
-        return np.min(np.linalg.norm(food - head, axis=1))
-
     def reverse_snake(self):
         """
         if reverse mode,
@@ -362,7 +385,6 @@ class SnakeGrid:
             cursor = cursor.next_node
             if cursor == None:  break
             dir, dir_before = dir_before, self.grid[cursor.pos]
-            print(dir, dir_before)
         self.head, self.tail = self.tail, self.head
 
     def get_snakes(self):
@@ -378,6 +400,13 @@ class SnakeGrid:
         :return: List of tuples of (row, col) of all food cells
         """
         return np.argwhere(self.grid == SnakeState.FOOD).tolist()
+
+    def get_anti_foods(self):
+        """
+        Get the positions of all the anti food cells
+        :return: List of tuples of (row, col) of all anti food cells
+        """
+        return np.argwhere(self.grid == SnakeState.ANTI_FOOD).tolist()
 
     def get_obstacles(self):
         """
@@ -424,7 +453,7 @@ class SnakeGrid:
         """
         return row < 0 or row >= self.grid.shape[0] or col < 0 or col >= self.grid.shape[1]
 
-    def move(self, new_head, eat_food=False, portal=False):
+    def move(self, new_head, eat_food=False, eat_anti_food=False):
         """
         Move the snake to the new head position
         Logics are implemented in environment class and this method is only used to update the grid and states
@@ -435,7 +464,11 @@ class SnakeGrid:
         new_head + self.head
         self.head = new_head
 
-        # Destroy the tail node
+        eat_poison_food = self.config.poison and eat_anti_food
+        eat_food = (not eat_poison_food) and (eat_food or eat_anti_food)
+
+        # Destroy the ta
+        # il node
         if not eat_food:
             self.grid[self.tail.pos] = SnakeState.EMPTY
             self.tail.destroy()
@@ -448,22 +481,57 @@ class SnakeGrid:
         self.head.next_node.direction = self.head.direction
         self.grid[self.head.next_node.pos] = self.head.direction
 
-    def remove_apple_node(self, position):
+    def remove_apple_node(self, position, eat_food, eat_anti_food):
+        cursor = self._find_position_apple(position)
+        if cursor == None:  return
+
+        eat_poison_food = self.config.poison and eat_anti_food
+        if eat_poison_food:
+            self.poison_count = self.poison_count_max
+            self.poisoned = True
+
+        self.grid[cursor.pos] = SnakeState.EMPTY
+        if self.anti_food_check:    self.grid[cursor.anti_pos] = SnakeState.EMPTY
+
+        if cursor.next_node is None:
+            cursor.prev_node.next_node = None
+            self.last_food = cursor.prev_node
+        elif cursor.prev_node is None:
+            cursor.next_node.prev_node = None
+            self.first_food = cursor.next_node
+        else:
+            cursor.prev_node.next_node = cursor.next_node
+            cursor.next_node.prev_node = cursor.prev_node
+
+    def _find_position_apple(self, position):
         cursor = self.first_food
+
         while cursor is not None:
-            if cursor.pos == position:
-                self.grid[position] = SnakeState.EMPTY
-                if cursor.next_node is None:
-                    cursor.prev_node.next_node = None
-                    self.last_food = cursor.prev_node
-                elif cursor.prev_node is None:
-                    cursor.next_node.prev_node = None
-                    self.first_food = cursor.next_node
-                else:
-                    cursor.prev_node.next_node = cursor.next_node
-                    cursor.next_node.prev_node = cursor.prev_node
-                break
+            if cursor.pos == position and self.config.portal:
+                self.next_portal_position = cursor.anti_pos
+                return cursor
+            elif cursor.anti_pos == position and self.config.portal:
+                self.next_portal_position = cursor.pos
+                return cursor
+            elif cursor.pos == position or (self.anti_food_check and cursor.anti_pos == position):
+                return cursor
             cursor = cursor.next_node
+        return None
+
+    def next_head_position(self, action):
+        if self.poisoned:
+            self.poison_count -= 1
+            if self.poison_count == 0:
+                self.poisoned = False
+            action = 1
+
+        if self.next_portal_position is not None:
+            new_head_pos = self.next_portal_position
+            self.next_portal_position = None
+            return new_head_pos, SnakeAction.absolute_direction(self.head.direction, action)
+        else:
+            new_head_pos = SnakeAction.absolute_position(self.head.direction, action)(*self.head.pos)
+            return new_head_pos, SnakeAction.absolute_direction(self.head.direction, action)
 
 
 class SnakeObservation(Dict):
@@ -476,9 +544,14 @@ class SnakeObservation(Dict):
             SnakeState.EMPTY: 0,
             **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
             SnakeState.FOOD: 2,
-            SnakeState.OBSTACLE: 3
+            SnakeState.OBSTACLE: 3,
+            SnakeState.ANTI_FOOD: 4,
         } if not direction_channel else {
-            **{enum: i for i, enum in enumerate(SnakeState)}
+            SnakeState.EMPTY: 0,
+            **{enum: i + 1 for i, enum in enumerate(SnakeState) if enum.name.startswith('SNAKE')},
+            SnakeState.FOOD: 5,
+            SnakeState.OBSTACLE: 6,
+            SnakeState.ANTI_FOOD: 7,
         }
 
         # -1 for binary representation except SnakeState.EMPTY
@@ -511,6 +584,7 @@ class SnakeObservation(Dict):
         :param obs: np.ndarray of shape (row, col) containing the internal states
         :return: np.ndarray of shape (row, col) containing the observation space
         """
+
         return np.vectorize(self.encodings.get)(obs).astype(self.dtype)
 
     def convert(self, state: SnakeGrid):
@@ -529,6 +603,7 @@ class SnakeObservation(Dict):
             ohe = np.eye(self.n_states, dtype=self.dtype)[self.encode(obs)]
             # Cut off the first channel containing SnakeState.EMPTY
             obs = ohe.transpose((-1, *list(range(len(ohe.shape))[:-1])))[1:]
+
         obs_dict.update({
             'grid': obs,
             'head_row': np.eye(state.grid.shape[0], dtype=self.dtype)[state.head.pos[0]],

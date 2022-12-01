@@ -39,36 +39,37 @@ class SnakeGUI(SnakeUI):
         self.image_cache = {
             SnakeState.FOOD: pygame.transform.scale(pygame.image.load(GUIConfig.PATH_APPLE),
                                                     (GUIConfig.TILE_W, GUIConfig.TILE_H)),
+            SnakeState.ANTI_FOOD: pygame.transform.scale(pygame.image.load(GUIConfig.PATH_ANTI_APPLE),
+                                                    (GUIConfig.TILE_W, GUIConfig.TILE_H)),
         }
         time.sleep(1)
         print('GUI initialized')
 
     def render(self, state):
         self.draw_screen()
-        self.draw_foods(state.get_foods())
-        self.draw_snake(state.head)
+        self.draw_foods(state.get_foods(), anti_food=False)
+        self.draw_foods(state.get_anti_foods(), anti_food=True)
+        self.draw_snake(state.head, state.poisoned)
         self.draw_obstacle(state.get_obstacles())
         pygame.display.update()
         time.sleep(0.05)
 
-    def draw_foods(self, coords):
+    def draw_foods(self, coords, anti_food=False):
         # draw on screen
         for row, col in coords:
-            self.screen.blit(self.image_cache[SnakeState.FOOD], (col * GUIConfig.TILE_W, row * GUIConfig.TILE_H))
+            if anti_food:   self.screen.blit(self.image_cache[SnakeState.ANTI_FOOD], (col * GUIConfig.TILE_W, row * GUIConfig.TILE_H))
+            else:           self.screen.blit(self.image_cache[SnakeState.FOOD], (col * GUIConfig.TILE_W, row * GUIConfig.TILE_H))
 
-    def draw_snake(self, head: SnakeNode):
+    def draw_snake(self, head: SnakeNode, poisoned):
         cursor = head
         while cursor is not None:
-            xtile = cursor.col * GUIConfig.TILE_W
-            ytile = cursor.row * GUIConfig.TILE_H
-
             # If head
             if cursor.prev_node is None:
-                self._draw_head(cursor)
+                self._draw_head(cursor, poisoned)
             # elif cursor.next_node is None:
             #     self._draw_tail(cursor)
             else:
-                self._draw_body(cursor)
+                self._draw_body(cursor, poisoned)
 
             cursor = cursor.next_node
 
@@ -79,7 +80,7 @@ class SnakeGUI(SnakeUI):
                              rect=Rect(col * GUIConfig.TILE_W + GUIConfig.LSPACE_W, row * GUIConfig.TILE_H + GUIConfig.LSPACE_H,
                                        GUIConfig.TILE_W - 2 * GUIConfig.LSPACE_W, GUIConfig.TILE_H - 2 * GUIConfig.LSPACE_H))
 
-    def _draw_head(self, node):
+    def _draw_head(self, node, poisoned):
         xtile = node.col * GUIConfig.TILE_W
         ytile = node.row * GUIConfig.TILE_H
 
@@ -88,8 +89,10 @@ class SnakeGUI(SnakeUI):
         width = GUIConfig.SNAK_W + GUIConfig.CONN_W // 2 * (node.direction in [SnakeState.SNAKE_L, SnakeState.SNAKE_R])
         height = GUIConfig.SNAK_H + GUIConfig.CONN_H // 2 * (node.direction in [SnakeState.SNAKE_U, SnakeState.SNAKE_D])
 
+        snake_color = GUIConfig.POISON_GREEN if poisoned else GUIConfig.LIGHT_BLUE
+
         pygame.draw.rect(surface=self.screen,
-                         color=GUIConfig.LIGHT_BLUE,
+                         color=snake_color,
                          rect=Rect(left, top, width, height))
         # draw eyes
         eh, ew = 9, 6
@@ -120,7 +123,7 @@ class SnakeGUI(SnakeUI):
                                        ew,
                                        eh))
 
-    def _draw_body(self, node):
+    def _draw_body(self, node, poisoned):
         xtile = node.col * GUIConfig.TILE_W
         ytile = node.row * GUIConfig.TILE_H
 
@@ -136,7 +139,10 @@ class SnakeGUI(SnakeUI):
         # if node.direction in (SnakeState.SNAKE_U, SnakeState.SNAKE_D):
         #     left += GUIConfig.CONN_W // 2
         #     width -= GUIConfig.CONN_W
-        pygame.draw.rect(surface=self.screen, color=GUIConfig.LIGHT_BLUE,
+
+        snake_color = GUIConfig.POISON_GREEN if poisoned else GUIConfig.LIGHT_BLUE
+
+        pygame.draw.rect(surface=self.screen, color=snake_color,
                          rect=Rect(xtile + GUIConfig.CONN_W // 2,
                                    ytile + GUIConfig.CONN_H // 2,
                                    GUIConfig.SNAK_W,
@@ -149,28 +155,28 @@ class SnakeGUI(SnakeUI):
         for d in dir:
             if d == SnakeState.SNAKE_U:
                 pygame.draw.rect(surface=self.screen,
-                                 color=GUIConfig.LIGHT_BLUE,
+                                 color=snake_color,
                                  rect=Rect(xtile + GUIConfig.CONN_W // 2,
                                            ytile,
                                            GUIConfig.SNAK_W,
                                            GUIConfig.CONN_H // 2))
             if d == SnakeState.SNAKE_R:
                 pygame.draw.rect(surface=self.screen,
-                                 color=GUIConfig.LIGHT_BLUE,
+                                 color=snake_color,
                                  rect=Rect(xtile + GUIConfig.SNAK_W + GUIConfig.CONN_W // 2,
                                            ytile + GUIConfig.CONN_H // 2,
                                            GUIConfig.CONN_W // 2,
                                            GUIConfig.SNAK_H))
             if d == SnakeState.SNAKE_D:
                 pygame.draw.rect(surface=self.screen,
-                                 color=GUIConfig.LIGHT_BLUE,
+                                 color=snake_color,
                                  rect=Rect(xtile + GUIConfig.CONN_W // 2,
                                            ytile + GUIConfig.SNAK_H + GUIConfig.CONN_H // 2,
                                            GUIConfig.SNAK_W,
                                            GUIConfig.CONN_H // 2))
             if d == SnakeState.SNAKE_L:
                 pygame.draw.rect(surface=self.screen,
-                                 color=GUIConfig.LIGHT_BLUE,
+                                 color=snake_color,
                                  rect=Rect(xtile,
                                            ytile + GUIConfig.CONN_H // 2,
                                            GUIConfig.CONN_W // 2,

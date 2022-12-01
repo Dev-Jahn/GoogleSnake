@@ -35,7 +35,7 @@ class GoogleSnakeEnv(Env):
         reward = self.config.IDLE
         assert self.action_space.contains(action)
         # Get the new head position
-        new_head_pos = SnakeAction.absolute_position(self.state.head.direction, action)(*self.state.head.pos)
+        new_head_pos, new_head_direction = self.state.next_head_position(action)
         if self.config.loop:    new_head_pos = (new_head_pos[0] % self.config.grid_shape[0], new_head_pos[1] % self.config.grid_shape[1])
         # If the snake is dead, terminate the episode with a negative reward
         if self.state.is_dead(*new_head_pos):
@@ -43,18 +43,22 @@ class GoogleSnakeEnv(Env):
             return self.observation_space.convert(self.state), self.config.DEATH, True, {}
 
         # Update the internal state grid
-        new_head = SnakeNode(*new_head_pos, direction=SnakeAction.absolute_direction(self.state.head.direction, action))
+        new_head = SnakeNode(*new_head_pos, direction=new_head_direction)
+
         # Check if the snake eats food
         eat_food = self.state.grid[new_head_pos] == SnakeState.FOOD.value
-        dist = self.state.closest_food_dist()
-        self.state.move(new_head, eat_food=eat_food)
-        self.state.remove_apple_node(new_head_pos)
+        eat_anti_food = self.state.grid[new_head_pos] == SnakeState.ANTI_FOOD.value
+
+        self.state.remove_apple_node(new_head_pos, eat_food=eat_food, eat_anti_food=eat_anti_food)
+        self.state.move(new_head, eat_food=eat_food, eat_anti_food=eat_anti_food)
+
         # Generate new food
-        if eat_food:
-            self.food_taken += 1
-            reward += self.config.FOOD
-            if self.config.reward_mode == 'time_constrained_and_food':
-                reward += (self.food_taken - 1) * 2
+        if eat_food or eat_anti_food:
+            if not (eat_anti_food and self.config.poison):
+                self.food_taken += 1
+                reward += self.config.FOOD
+                if self.config.reward_mode == 'time_constrained_and_food':
+                    reward += (self.food_taken - 1) * 2
             self.state.generate_food()
             # If wall option is enabled, generate an obstacle every odd number of foods eaten
             if self.config.wall and self.food_taken % 2 == 1:
@@ -62,21 +66,15 @@ class GoogleSnakeEnv(Env):
             # head and tail are flipped when snake eats food
             if self.config.reverse:
                 self.state.reverse_snake()
-            # If portal option is enabled, save a portal marker in advance
-            if self.config.portal:
-                raise NotImplementedError
-                # if self.food_taken % 2 == 1:
-                #     self.state.generate_portal()
-                # else:
-                #     self.state.move(self.state.portalmarker, portal=True)
-        # Distance based reward
-        elif self.state.closest_food_dist() - dist < 0:
-            reward += self.config.DIST
-        elif self.state.closest_food_dist() - dist > 0:
-            reward -= self.config.DIST
+
+        print("before moving apple")
+        print(self.state.grid)
 
         if self.config.moving:
             self.state.move_apple()
+
+        print("after moving apple")
+        print(self.state.grid)
 
         return self.observation_space.convert(self.state), reward, False, {}
 

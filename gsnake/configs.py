@@ -35,7 +35,7 @@ class GoogleSnakeConfig:
         self.n_foods = n_foods if not mixed else random.choice([1, 3, 5])
         # If True, the obstacles are generated every odd number of foods eaten (V)
         self.wall = wall if not mixed else random.choice([True, False])
-        # If True, total number of foods doubled and foods work as portals pairwise
+        # If True, total number of foods doubled and foods work as portals pairwise (V)
         self.portal = portal if not mixed else random.choice([True, False])
         # If True, snake body becomes penetrable alternately
         self.cheese = cheese if not mixed else random.choice([True, False])
@@ -43,7 +43,7 @@ class GoogleSnakeConfig:
         self.loop = loop if not mixed else random.choice([True, False])
         # If True, head and tail are flipped when snake eats food (V)
         self.reverse = reverse if not mixed else random.choice([True, False])
-        # If True, foods move linearly in a random direction
+        # If True, foods move linearly in a random direction (V)
         self.moving = moving if not mixed else random.choice([True, False])
         # If True, generate point symmetric snake body
         self.yinyang = yinyang if not mixed else random.choice([True, False])
@@ -51,7 +51,7 @@ class GoogleSnakeConfig:
         self.key = key if not mixed else random.choice([True, False])
         # If True, goal is changed to move box to the specific point
         self.box = box if not mixed else random.choice([True, False])
-        # If True, generate poison foods with normal foods, which paralyze snake for a while
+        # If True, generate poison foods with normal foods, which paralyze snake for a while (V)
         self.poison = poison if not mixed else random.choice([True, False])
         # If True, show next apple position and body at that point become penetrable for a while
         self.transparent = transparent if not mixed else random.choice([True, False])
@@ -69,17 +69,14 @@ class GoogleSnakeConfig:
             self.DEATH = -10 * reward_scale
             self.FOOD = 100 * reward_scale
             self.IDLE = 0 * reward_scale
-            self.DIST = 1 * reward_scale
         elif reward_mode == 'time_constrained':
             self.DEATH = -10 * reward_scale
             self.FOOD = 100 * reward_scale
             self.IDLE = -1 * reward_scale
-            self.DIST = 2 * reward_scale
         elif reward_mode == 'time_constrained_and_food':
             self.DEATH = 0
             self.FOOD = (self.height + self.width) * 2
             self.IDLE = -1
-            self.DIST = 0
 
     @property
     def grid_shape(self):
@@ -91,9 +88,10 @@ class GUIConfig:
     CAPTION = "Google Snake"
 
     # PATHS
-    RESOURCE_ROOT = 'resource'
+    RESOURCE_ROOT = '../resource'
     PATH_ICON = os.path.join(RESOURCE_ROOT, 'snake_logo.png')
     PATH_APPLE = os.path.join(RESOURCE_ROOT, 'apple.png')
+    PATH_ANTI_APPLE = os.path.join(RESOURCE_ROOT, 'anti_apple.png')
 
     # Pixel sizes of elements
     TILE_W = 50
@@ -107,6 +105,7 @@ class GUIConfig:
 
     # Colors
     LIGHT_BLUE = (71, 117, 235)
+    POISON_GREEN = (0, 128, 0)
     BLACK = (0, 0, 0)
     GREEN1 = (170, 215, 81)
     GREEN2 = (162, 209, 73)
