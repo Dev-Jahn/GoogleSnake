@@ -567,12 +567,12 @@ class SnakeObservation(Dict):
         space_dict.update(OrderedDict({
             'head_row': OneHotBox(shape[1]),
             'head_col': OneHotBox(shape[2]),
-            'head_direction': OneHotBox(4)
-        }))
-        space_dict.update(OrderedDict({
+            'head_direction': OneHotBox(4),
             'tail_row': OneHotBox(shape[1]),
             'tail_col': OneHotBox(shape[2]),
-            'tail_direction': OneHotBox(4)
+            'tail_direction': OneHotBox(4),
+            'portal_row': OneHotBox(shape[1]+1),
+            'portal_col': OneHotBox(shape[2]+1)
         }))
         super(SnakeObservation, self).__init__(space_dict)
         self.dtype = dtype
@@ -611,7 +611,9 @@ class SnakeObservation(Dict):
             'head_direction': np.eye(4, dtype=self.dtype)[state.head.direction - min(SnakeState)],
             'tail_row': np.eye(state.grid.shape[0], dtype=self.dtype)[state.tail.pos[0]],
             'tail_col': np.eye(state.grid.shape[1], dtype=self.dtype)[state.tail.pos[1]],
-            'tail_direction': np.eye(4, dtype=self.dtype)[state.tail.direction - min(SnakeState)]
+            'tail_direction': np.eye(4, dtype=self.dtype)[state.tail.direction - min(SnakeState)],
+            'portal_row': np.eye(state.grid.shape[0]+1, dtype=self.dtype)[0] if (state.next_portal_position is None) else np.eye(state.grid.shape[0]+1, dtype=self.dtype)[state.next_portal_position[0]],
+            'portal_col': np.eye(state.grid.shape[1]+1, dtype=self.dtype)[0] if (state.next_portal_position is None) else np.eye(state.grid.shape[1]+1, dtype=self.dtype)[state.next_portal_position[1]]
         })
         assert self['grid'].contains(obs_dict['grid']), f'grid does not match with the observation space'
         assert self['head_row'].contains(obs_dict['head_row']), f'head_row does not match with the observation space'
@@ -620,6 +622,8 @@ class SnakeObservation(Dict):
         assert self['tail_row'].contains(obs_dict['tail_row']), f'head_row does not match with the observation space'
         assert self['tail_col'].contains(obs_dict['tail_col']), f'head_col does not match with the observation space'
         assert self['tail_direction'].contains(obs_dict['tail_direction']), f'direction does not match with the observation space'
+        assert self['portal_row'].contains(obs_dict['portal_row']), f'direction does not match with the observation space'
+        assert self['portal_col'].contains(obs_dict['portal_col']), f'direction does not match with the observation space'
         assert self.contains(obs_dict), f'Observation does not match with the observation space'
 
         return obs_dict
