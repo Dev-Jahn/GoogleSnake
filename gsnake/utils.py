@@ -612,8 +612,10 @@ class SnakeObservation(Dict):
             'tail_row': np.eye(state.grid.shape[0], dtype=self.dtype)[state.tail.pos[0]],
             'tail_col': np.eye(state.grid.shape[1], dtype=self.dtype)[state.tail.pos[1]],
             'tail_direction': np.eye(4, dtype=self.dtype)[state.tail.direction - min(SnakeState)],
-            'portal_row': np.eye(state.grid.shape[0]+1, dtype=self.dtype)[0] if (state.next_portal_position is None) else np.eye(state.grid.shape[0]+1, dtype=self.dtype)[state.next_portal_position[0]],
-            'portal_col': np.eye(state.grid.shape[1]+1, dtype=self.dtype)[0] if (state.next_portal_position is None) else np.eye(state.grid.shape[1]+1, dtype=self.dtype)[state.next_portal_position[1]]
+            'portal_row': np.eye(state.grid.shape[0]+1, dtype=self.dtype)[0] if (state.next_portal_position is None) else\
+                          np.eye(state.grid.shape[0]+1, dtype=self.dtype)[state.next_portal_position[0]],
+            'portal_col': np.eye(state.grid.shape[1]+1, dtype=self.dtype)[0] if (state.next_portal_position is None) else\
+                          np.eye(state.grid.shape[1]+1, dtype=self.dtype)[state.next_portal_position[1]]
         })
         assert self['grid'].contains(obs_dict['grid']), f'grid does not match with the observation space'
         assert self['head_row'].contains(obs_dict['head_row']), f'head_row does not match with the observation space'

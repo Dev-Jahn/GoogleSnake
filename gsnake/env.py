@@ -67,14 +67,8 @@ class GoogleSnakeEnv(Env):
             if self.config.reverse:
                 self.state.reverse_snake()
 
-        print("before moving apple")
-        print(self.state.grid)
-
         if self.config.moving:
             self.state.move_apple()
-
-        print("after moving apple")
-        print(self.state.grid)
 
         return self.observation_space.convert(self.state), reward, False, {}
 
