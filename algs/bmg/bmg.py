@@ -144,6 +144,8 @@ class Agent:
         self.ac_k = ActorCritic(input_channel, height, width, input_node, n_actions, alpha)
         self.meta_mlp = MetaMLP(m_alpha, betas, eps, input_dims=10, fc1_dims=64)
 
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+
         self.node_name = ['head_col', 'head_row', 'head_direction', 'tail_col', 'tail_row', 'tail_direction', 'portal_row', 'portal_col']
 
         self.env = env
@@ -172,8 +174,8 @@ class Agent:
         obs = self.env.reset()
         done = False
         for _ in range(self.rollout_steps):
-            grid_obs = T.tensor(obs['grid'], dtype=T.float)
-            node_obs = T.cat(tuple([T.tensor(obs[name], dtype=T.float) for name in self.node_name]), dim=1)
+            grid_obs = T.tensor(obs['grid'], dtype=T.float).to(self.device)
+            node_obs = T.cat(tuple([T.tensor(obs[name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
             dist, v = self.actorcritic(grid_obs, node_obs)
 
             action = dist.sample()
@@ -203,8 +205,8 @@ class Agent:
                 break
             '''
 
-        grid_obs = T.tensor(obs_['grid'], dtype=T.float)
-        node_obs = T.cat(tuple([T.tensor(obs_[name], dtype=T.float) for name in self.node_name]), dim=1)
+        grid_obs = T.tensor(obs_['grid'], dtype=T.float).to(self.device)
+        node_obs = T.cat(tuple([T.tensor(obs_[name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
         _, v = self.actorcritic(grid_obs, node_obs)
 
         # Calc discounted returns
@@ -242,16 +244,16 @@ class Agent:
         with T.no_grad():
             dist_tb = []
             for i in range(len(states)):
-                grid_obs = T.tensor(states[i]['grid'], dtype=T.float)
-                node_obs = T.cat(tuple([T.tensor(states[i][name], dtype=T.float) for name in self.node_name]), dim=1)
+                grid_obs = T.tensor(states[i]['grid'], dtype=T.float).to(self.device)
+                node_obs = T.cat(tuple([T.tensor(states[i][name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
                 dist_tb.append(tb(grid_obs, node_obs)[0])
 
         torchopt.recover_state_dict(ac_k, ac_k_state_dict)
 
         dist_k = []
         for i in range(len(states)):
-            grid_obs = T.tensor(states[i]['grid'], dtype=T.float)
-            node_obs = T.cat(tuple([T.tensor(states[i][name], dtype=T.float) for name in self.node_name]), dim=1)
+            grid_obs = T.tensor(states[i]['grid'], dtype=T.float).to(self.device)
+            node_obs = T.cat(tuple([T.tensor(states[i][name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
             dist_k.append(ac_k(grid_obs, node_obs)[0])
 
         # KL Div between dsitributions of TB and AC_K, respectively
