@@ -37,23 +37,21 @@ config = GoogleSnakeConfig(
 
 class ActorCritic(nn.Module):
 
-    def __init__(self, input_channel, height, width, input_node, n_actions, alpha, fc0_dims=2560, fc1_dims=1024, fc2_dims=512, gamma=0.99):
+    def __init__(self, input_channel, height, width, input_node, n_actions, alpha, fc0_dims=640, fc1_dims=256, fc2_dims=256, gamma=0.99):
         super(ActorCritic, self).__init__()
         self.chkpt_file = os.path.join("todo" + '_bmg')
 
-        hidden_channel = [16, 32, 64, 64]
+        hidden_channel = [32, 64, 64]
         hidden_nodes = [256, 256, 256]
 
         self.grid_convolution = nn.Sequential(
-            nn.Conv2d(input_channel, hidden_channel[0], kernel_size=1),
-            nn.Conv2d(hidden_channel[0], hidden_channel[1], kernel_size=5, groups=hidden_channel[0], padding=1),
+            nn.Conv2d(input_channel, hidden_channel[0], kernel_size=5, stride=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(hidden_channel[1], hidden_channel[1], kernel_size=1),
-            nn.Conv2d(hidden_channel[1], hidden_channel[2], kernel_size=5, groups=hidden_channel[1], padding=1),
+            nn.Conv2d(hidden_channel[0], hidden_channel[1], kernel_size=4, stride=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(hidden_channel[2], hidden_channel[2], kernel_size=1),
-            nn.Conv2d(hidden_channel[2], hidden_channel[3], kernel_size=5, groups=hidden_channel[2], padding=1),
-            nn.ReLU()
+            nn.Conv2d(hidden_channel[1], hidden_channel[2], kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Flatten(),
         )
 
         self.node_linear = nn.Sequential(
@@ -75,7 +73,7 @@ class ActorCritic(nn.Module):
 
     def forward(self, grid, nodes):
 
-        x1 = T.flatten(self.grid_convolution(grid), start_dim=1)
+        x1 = self.grid_convolution(grid)
         x2 = self.node_linear(nodes)
 
         x = T.cat((x1, x2), dim=1)
@@ -283,12 +281,7 @@ class Agent:
         outer_range = outer_range // (self.K_steps + self.L_steps)
         ct = 0
 
-        count = 0
-        print(outer_range)
         for _ in range(outer_range):
-            count += 1
-            print(count)
-
             for _ in range(self.K_steps):
                 loss = self.rollout()
                 self.actorcritic.optim.step(loss)
