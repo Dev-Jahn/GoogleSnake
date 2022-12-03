@@ -1,307 +1,388 @@
-import copy
-import warnings
-from collections import deque
-from typing import Any, Dict, Optional, Type, TypeVar, Union
+import sys
 
-import numpy as np
-import torch
+sys.path.append("../../../../..")
+
+from functools import reduce
+import torch as T
 import torch.nn as nn
-from torch.nn import functional as F
+import torch.nn.functional as F
+import numpy as np
+import random
+import os
 import torchopt
-from gym import spaces
+from torch.distributions import Categorical
+from torch.distributions.kl import kl_divergence
+import matplotlib.pyplot as plt
+from gsnake.env import GoogleSnakeEnv
+from gsnake.configs import GoogleSnakeConfig
 
-from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
-from stable_baselines3.common.policies import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, \
-    MultiInputActorCriticPolicy
-from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
-from stable_baselines3.common.utils import explained_variance, get_schedule_fn
-from stable_baselines3.common.distributions import kl_divergence as kld
+from gym.envs.registration import register
+from stable_baselines3.common.env_util import make_vec_env
 
+register(
+    id='GoogleSnake-v1',
+    entry_point=GoogleSnakeEnv,
+    max_episode_steps=2000,
+)
 
-class BMG(OnPolicyAlgorithm):
-    """
-    Implementation of Bootstrapped Meta-learning (Flennerhag et al., ICLR 2022)
+name = '5000_dir_channel_50M'
 
-    :param policy: The policy model to use (MlpPolicy, CnnPolicy, ...)
-    :param env: The environment to learn from (if registered in Gym, can be str)
-    :param learning_rate: The learning rate, it can be a function
-        of the current progress remaining (from 1 to 0)
-    :param n_steps: The number of steps to run for each environment per update
-        (i.e. batch size is n_steps * n_env where n_env is number of environment copies running in parallel)
-    :param gamma: Discount factor
-    :param gae_lambda: Factor for trade-off of bias vs variance for Generalized Advantage Estimator.
-        Equivalent to classic advantage when set to 1.
-    :param vf_coef: Value function coefficient for the loss calculation
-    :param max_grad_norm: The maximum value for the gradient clipping
-    :param use_sde: Whether to use generalized State Dependent Exploration (gSDE)
-        instead of action noise exploration (default: False)
-    :param sde_sample_freq: Sample a new noise matrix every n steps when using gSDE
-        Default: -1 (only sample at the beginning of the rollout)
-    :param tensorboard_log: the log location for tensorboard (if None, no logging)
-    :param create_eval_env: Whether to create a second environment that will be
-        used for evaluating the agent periodically. (Only available when passing string for the environment)
-        Caution, this parameter is deprecated and will be removed in the future.
-        Please use `EvalCallback` or a custom Callback instead.
-    :param policy_kwargs: additional arguments to be passed to the policy on creation
-    :param verbose: Verbosity level: 0 for no output, 1 for info messages (such as device or wrappers used), 2 for
-        debug messages
-    :param seed: Seed for the pseudo random generators
-    :param device: Device (cpu, cuda, ...) on which the code should be run.
-        Setting it to auto, the code will be run on the GPU if possible.
-    :param _init_setup_model: Whether or not to build the network at the creation of the instance
-    """
-
-    policy_aliases: Dict[str, Type[BasePolicy]] = {
-        "MlpPolicy": ActorCriticPolicy,
-        "CnnPolicy": ActorCriticCnnPolicy,
-        "MultiInputPolicy": MultiInputActorCriticPolicy,
-    }
-
-    def __init__(
-            self,
-            # Base on-policy algorithm
-            policy: Union[str, Type[ActorCriticPolicy]],
-            env: Union[GymEnv, str],
-            learning_rate: Union[float, Schedule] = 1e-1,
-            n_steps: int = 5,
-            gamma: float = 0.99,
-            gae_lambda: float = 1.0,
-            normalize_advantage: bool = True,
-            vf_coef: float = 0.3,
-            max_grad_norm: float = 0.5,
-            use_sde: bool = False,
-            sde_sample_freq: int = -1,
-            # Meta-learning related parameters
-            K: int = 1,
-            L: int = 1,
-            meta_window_size: int = 10,
-            meta_learning_rate: Union[float, Schedule] = 1e-4,
-            # PPO
-            clip_range: Union[float, Schedule] = 0.2,
-            clip_range_vf: Union[None, float, Schedule] = None,
-            target_kl: Optional[float] = None,
-            # misc
-            tensorboard_log: Optional[str] = None,
-            create_eval_env: bool = False,
-            policy_kwargs: Optional[Dict[str, Any]] = None,
-            verbose: int = 0,
-            seed: Optional[int] = None,
-            device: Union[torch.device, str] = "auto",
-            _init_setup_model: bool = True,
-    ):
-        super().__init__(
-            policy,
-            env,
-            learning_rate=learning_rate,
-            n_steps=n_steps,
-            gamma=gamma,
-            gae_lambda=gae_lambda,
-            ent_coef=0,
-            vf_coef=vf_coef,
-            max_grad_norm=max_grad_norm,
-            use_sde=use_sde,
-            sde_sample_freq=sde_sample_freq,
-            tensorboard_log=tensorboard_log,
-            policy_kwargs=policy_kwargs,
-            verbose=verbose,
-            device=device,
-            create_eval_env=create_eval_env,
-            seed=seed,
-            _init_setup_model=False,
-            supported_action_spaces=(
-                spaces.Box,
-                spaces.Discrete,
-                spaces.MultiDiscrete,
-                spaces.MultiBinary,
-            ),
-        )
-
-        # Meta-learning related variables
-        self.meta_learning_rate = meta_learning_rate
-        self.K = K
-        self.L = L
-        self.meta_window_size = meta_window_size
-        self.avg_rollout_reward_buffer = deque([0] * 10, maxlen=meta_window_size)
-        self.before_bootstrap = None
-
-        self.clip_range = clip_range
-        self.clip_range_vf = clip_range_vf
-        self.normalize_advantage = normalize_advantage
-        self.target_kl = target_kl
-
-        if _init_setup_model:
-            self._setup_model()
-
-    def _setup_model(self) -> None:
-        super()._setup_model()
-        # For PPO implementation
-        # Initialize schedules for policy/value clipping
-        self.clip_range = get_schedule_fn(self.clip_range)
-        if self.clip_range_vf is not None:
-            if isinstance(self.clip_range_vf, (float, int)):
-                assert self.clip_range_vf > 0, "`clip_range_vf` must be positive, " "pass `None` to deactivate vf clipping"
-
-            self.clip_range_vf = get_schedule_fn(self.clip_range_vf)
-        # Meta-learning related variables
-        self.kth_policy = copy.deepcopy(self.policy)
-        self.meta_learner = MLP(input_size=self.meta_window_size, feature_size=32, device=self.policy.device)
-        self.meta_optimizer = torch.optim.Adam(
-            self.policy.parameters(),
-            lr=self.meta_learning_rate, betas=(0.9, 0.999), eps=1e-4,
-        )
-
-    def inner(self, bootstrap=False):
-        # Switch to train mode (this affects batch norm / dropout)
-        self.policy.set_training_mode(True)
-        # Update optimizer learning rate
-        # self._update_learning_rate(self.policy.optimizer)
-        param_grads = dict()
-
-        # This will only loop once (get all data in one go)
-        for rollout_data in self.rollout_buffer.get(batch_size=None):
-            self.avg_rollout_reward_buffer.append(self.rollout_buffer.rewards.mean())
-            actions = rollout_data.actions
-            if isinstance(self.action_space, spaces.Discrete):
-                # Convert discrete action from float to long
-                actions = actions.long().flatten()
-
-            values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.observations, actions)
-            values = values.flatten()
-
-            # Normalize advantage (not present in the original implementation)
-            advantages = rollout_data.advantages
-            if self.normalize_advantage:
-                advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-
-            # Policy gradient loss
-            policy_loss = -(advantages * log_prob).mean()
-
-            # Value loss using the TD(gae_lambda) target
-            value_loss = F.mse_loss(rollout_data.returns, values)
-
-            # predict entropy coefficient with meta-learner
-            ent_coef = self.meta_learner(torch.Tensor(self.avg_rollout_reward_buffer).to(self.meta_learner.device))
-
-            # Entropy loss favor exploration
-            if entropy is None:
-                # Approximate entropy when no analytical form
-                entropy_loss = -torch.mean(-log_prob)
-            else:
-                entropy_loss = -torch.mean(entropy)
-
-            if bootstrap:
-                loss = policy_loss
-            else:
-                # l2norm = sum([p.norm() for p in self.policy.mlp_extractor.value_net.parameters()])
-                # l2norm = sum([p.norm() for p in self.policy.value_net.parameters()])
-                # loss = policy_loss + ent_coef * entropy_loss + self.vf_coef * value_loss + l2norm
-                loss = policy_loss + ent_coef * entropy_loss + self.vf_coef * value_loss
-
-            for key, param in dict(self.policy.named_parameters()).items():
-                with torch.no_grad():
-                    param_grads.update({key: param})
-            # TODO: check if grad clipping is compatible with meta-learning
-            # Clip grad norm
-            # torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
-            # Optimization step
-            self.policy.optimizer.step(loss)
-
-        print(f'{self._n_updates + 1} inner updates')
-        print(f'{(self._n_updates + 1) % (self.K + self.L)} / K+L({self.K}+{self.L})')
-        for key, param in dict(self.policy.named_parameters()).items():
-            with torch.no_grad():
-                grad_norm = (param - param_grads[key]).norm().item()
-                print(f'{key:35}| Grad Norm | {grad_norm:.6f}')
-        print('=' * 80)
-
-        # Logging
-        self.logger.record("rollout/max_food_taken", max([info['food_taken'] for info in self.ep_info_buffer]))
-        explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
-        self._n_updates += 1
-        self.logger.record("train/n_updates", self._n_updates)
-        self.logger.record("train/inner_iter", self._n_updates)
-        self.logger.record("train/outer_iter", self._n_updates // (self.K * self.L))
-        self.logger.record("train/explained_variance", explained_var)
-        self.logger.record("train/entropy_loss", entropy_loss.item())
-        self.logger.record("train/policy_loss", policy_loss.item())
-        self.logger.record("train/value_loss", value_loss.item())
-        if hasattr(self.policy, "log_std"):
-            self.logger.record("train/std", torch.exp(self.policy.log_std).mean().item())
-
-        # Checkpoint when K-th inner loop is done
-        if self._n_updates % (self.K + self.L) == self.K:
-            torchopt.recover_state_dict(self.kth_policy, torchopt.extract_state_dict(self.policy))
-
-        if self._n_updates % (self.K + self.L) == (self.K + self.L - 1):
-            self.before_bootstrap = torchopt.extract_state_dict(self.policy)
-
-    def outer(self):
-        rollout_data = next(self.rollout_buffer.get())
-        kth_dist = self.kth_policy.get_distribution(rollout_data.observations)
-        with torch.no_grad():
-            bootstrap_dist = self.policy.get_distribution(rollout_data.observations)
-        loss = self._matching_function(kth_dist, bootstrap_dist)
-        self.meta_optimizer.zero_grad()
-        loss.backward()
-        self.meta_optimizer.step()
-
-    def _matching_function(self, kth_dist, bootstrapped_dist):
-        return kld(kth_dist, bootstrapped_dist).sum()
-
-    def train(self) -> None:
-        if self._n_updates % (self.K + self.L) < (self.K + self.L - 1):
-            self.inner()
-        else:  # At (K+L)th iteration of cycle, do meta-learning
-            self.inner(bootstrap=True)
-            self.outer()
-            # Recover inner model parameters to the point before bootstrapping and stop gradient
-            torchopt.recover_state_dict(self.policy, self.before_bootstrap)
-            torchopt.stop_gradient(self.policy)
-            torchopt.stop_gradient(self.policy.optimizer)
-
-    def learn(
-            self,
-            total_timesteps: int,
-            callback: MaybeCallback = None,
-            log_interval: int = 1,
-            eval_env: Optional[GymEnv] = None,
-            eval_freq: int = -1,
-            n_eval_episodes: int = 5,
-            tb_log_name: str = "PPO",
-            eval_log_path: Optional[str] = None,
-            reset_num_timesteps: bool = True,
-            progress_bar: bool = False,
-    ):
-        """
-        Collects rollouts at self.rollout_buffer, call self.train() and update self.num_timesteps.
-        Logging and callback is also handled.
-        Implemented in superclass.
-        """
-        return super().learn(
-            total_timesteps=total_timesteps,
-            callback=callback,
-            log_interval=log_interval,
-            eval_env=eval_env,
-            eval_freq=eval_freq,
-            n_eval_episodes=n_eval_episodes,
-            tb_log_name=tb_log_name,
-            eval_log_path=eval_log_path,
-            reset_num_timesteps=reset_num_timesteps,
-            progress_bar=progress_bar,
-        )
+config = GoogleSnakeConfig(
+    multi_channel=True,
+    direction_channel=True,
+    reward_mode='time_constrained_and_food',
+    reward_scale=1,
+    n_foods=3
+)
 
 
-class MLP(nn.Module):
-    def __init__(self, input_size, feature_size, device):
-        super(MLP, self).__init__()
-        self.device = device
-        self.features = nn.Sequential(
-            nn.Linear(input_size, feature_size),
+class ActorCritic(nn.Module):
+
+    def __init__(self, input_channel, height, width, input_node, n_actions, alpha, fc0_dims=640, fc1_dims=256,
+                 fc2_dims=256, gamma=0.99):
+        super(ActorCritic, self).__init__()
+        self.chkpt_file = os.path.join("ActorCritic" + '_bmg')
+
+        hidden_channel = [32, 64, 64]
+        hidden_nodes = [256, 256, 256]
+
+        self.grid_convolution = nn.Sequential(
+            nn.Conv2d(input_channel, hidden_channel[0], kernel_size=5, stride=1, padding=0),
             nn.ReLU(),
-            nn.Linear(feature_size, 1),
-            nn.Sigmoid()
+            nn.Conv2d(hidden_channel[0], hidden_channel[1], kernel_size=4, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(hidden_channel[1], hidden_channel[2], kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Flatten(),
         )
-        self.to(device)
+
+        self.node_linear = nn.Sequential(
+            nn.Linear(input_node, hidden_nodes[0]),
+            nn.Linear(hidden_nodes[0], hidden_nodes[1]),
+            nn.Linear(hidden_nodes[1], hidden_nodes[2])
+        )
+
+        self.pi1 = nn.Linear(fc0_dims, fc1_dims)
+        self.v1 = nn.Linear(fc0_dims, fc1_dims)
+        self.pi2 = nn.Linear(fc1_dims, fc2_dims)
+        self.v2 = nn.Linear(fc1_dims, fc2_dims)
+        self.pi = nn.Linear(fc2_dims, n_actions)
+        self.v = nn.Linear(fc2_dims, 1)
+
+        self.optim = torchopt.MetaSGD(self, lr=alpha)
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def forward(self, grid, nodes):
+        x1 = self.grid_convolution(grid)
+        x2 = self.node_linear(nodes)
+
+        x = T.cat((x1, x2), dim=1)
+
+        pi = F.relu(self.pi1(x))
+        v = F.relu(self.v1(x))
+
+        pi = F.relu(self.pi2(pi))
+        v = F.relu(self.v2(v))
+
+        pi = self.pi(pi)
+        v = self.v(v)
+
+        probs = T.softmax(pi, dim=1)
+        dist = Categorical(probs)
+
+        return dist, v
+
+    def choose_action(self, grid, nodes):
+        dist, v = self.forward(grid, nodes)
+        action = dist.sample().numpy()[0]
+
+        return action
+
+    def save_checkpoint(self):
+        print("...Saving Checkpoint...")
+        T.save(self.state_dict(), self.chkpt_file)
+
+    def load_checkpoint(self):
+        print("...Loading Checkpoint...")
+        self.load_state_dict(T.load(self.chkpt_file))
+
+
+class MetaMLP(nn.Module):
+    def __init__(self, alpha, betas=(0.9, 0.999), eps=1e-4, input_dims=10, fc1_dims=64):
+        super(MetaMLP, self).__init__()
+        self.chkpt_file = os.path.join("MetaMLP" + '_bmg')
+
+        self.fc1 = nn.Linear(input_dims, fc1_dims)
+        self.fc2 = nn.Linear(fc1_dims, 1)
+
+        self.optim = T.optim.Adam(self.parameters(), lr=alpha, betas=betas, eps=eps)
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.to(self.device)
 
     def forward(self, x):
-        return self.features(x)
+        out = F.relu(self.fc1(x))
+        out = T.sigmoid(self.fc2(out))
+        return out
+
+    def save_checkpoint(self):
+        print("...Saving Checkpoint...")
+        T.save(self.state_dict(), self.chkpt_file)
+
+    def load_checkpoint(self):
+        print("...Loading Checkpoint...")
+        self.load_state_dict(T.load(self.chkpt_file))
+
+
+class Agent:
+    def __init__(self, input_channel, height, width, input_node, n_actions, n_env, gamma, alpha, m_alpha, betas, eps,
+                 name,
+                 env, steps, K_steps, L_steps, rollout_steps, random_seed):
+        super(Agent, self).__init__()
+
+        self.actorcritic = ActorCritic(input_channel, height, width, input_node, n_actions, alpha)
+        self.ac_k = ActorCritic(input_channel, height, width, input_node, n_actions, alpha)
+        self.meta_mlp = MetaMLP(m_alpha, betas, eps, input_dims=10, fc1_dims=64)
+
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+
+        self.node_name = ['head_col', 'head_row', 'head_direction', 'tail_col', 'tail_row', 'tail_direction',
+                          'portal_row', 'portal_col']
+
+        self.env = env
+        self.name = f"agent_{name}"
+        self.n_actions = n_actions
+        self.n_env = n_env
+        self.input_channel = input_channel
+        self.height = height
+        self.width = width
+        self.input_node = input_node
+        self.steps = steps
+        self.K_steps = K_steps
+        self.L_steps = L_steps
+        self.rollout_steps = rollout_steps
+        self.random_seed = random_seed
+        self.gamma = gamma
+
+        self.total_done_reward = []
+        self.total_done_reward_step = []
+
+        # stats
+        self.avg_reward = [0 for _ in range(10)]
+        self.accum_reward = 0
+        self.cum_reward = []
+        self.entropy_rate = []
+        self.last_obs = self.env.reset()
+
+    def rollout(self, bootstrap=False):
+        log_probs, values, rewards, masks, states = [], [], [], [], []
+        rollout_reward, entropy = 0, 0
+        # obs = self.env.reset()
+        obs = self.last_obs
+        done = False
+        for _ in range(self.rollout_steps):
+            grid_obs = T.tensor(obs['grid'], dtype=T.float).to(self.device)
+            node_obs = T.cat(tuple([T.tensor(obs[name], dtype=T.float) for name in self.node_name]), dim=1).to(
+                self.device)
+            dist, v = self.actorcritic(grid_obs, node_obs)
+
+            action = dist.sample()
+
+            obs_, reward, done, _ = self.env.step(action.cpu().numpy())
+
+            log_prob = dist.log_prob(action)
+            entropy += -dist.entropy()
+
+            states.append(obs)
+            values.append(v)
+            log_probs.append(log_prob.unsqueeze(0).to(self.actorcritic.device))
+            rewards.append(T.tensor([reward]).to(self.actorcritic.device))
+
+            # non-episodic, (i.e use all rewards)
+            # masks.append(T.tensor([1-int(done)], dtype=T.float).to(self.actorcritic.device))
+            # rollout_reward += reward*(1-int(done))
+            rollout_reward += reward[0]
+            self.accum_reward += reward
+            self.cum_reward.append(self.accum_reward)
+
+            obs = obs_
+            self.last_obs = obs_
+
+            # No need, since non-episodic
+            '''
+            if done:
+                self.env.reset()
+                self.total_done_reward.append(rollout_reward)
+                break
+            '''
+
+        grid_obs = T.tensor(obs_['grid'], dtype=T.float).to(self.device)
+        node_obs = T.cat(tuple([T.tensor(obs_[name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
+        _, v = self.actorcritic(grid_obs, node_obs)
+
+        # Calc discounted returns
+        R = v.T
+        discounted_returns = []
+        for step in reversed(range(len(rewards))):
+            # R = rewards[step] + self.gamma * R * masks[step]
+            R = rewards[step] + self.gamma * R
+            discounted_returns.append(R)
+        discounted_returns.reverse()
+
+        self.avg_reward = self.avg_reward[1:]
+        self.avg_reward.append(rollout_reward / self.rollout_steps)
+        ar = T.tensor(self.avg_reward, dtype=T.float).to(self.actorcritic.device)
+        eps_en = self.meta_mlp(ar)
+
+        entropy = entropy / self.rollout_steps
+        self.entropy_rate.append(eps_en.item())
+
+        log_probs = T.cat(log_probs)
+        values = T.cat(values, dim=1).T
+        returns = T.cat(discounted_returns, dim=0)
+
+        advantage = returns - values
+
+        # Compute losses
+        actor_loss = -T.mean((log_probs * advantage.detach()), dim=0)
+        critic_loss = 0.5 * T.mean(advantage.pow(2), dim=0)
+
+        if bootstrap:
+            return actor_loss, states
+        else:
+            return actor_loss + critic_loss + eps_en * entropy
+
+    def kl_matching_function(self, ac_k, tb, states, ac_k_state_dict):
+        with T.no_grad():
+            dist_tb = []
+            for i in range(len(states)):
+                grid_obs = T.tensor(states[i]['grid'], dtype=T.float).to(self.device)
+                node_obs = T.cat(tuple([T.tensor(states[i][name], dtype=T.float) for name in self.node_name]),
+                                 dim=1).to(self.device)
+                dist_tb.append(tb(grid_obs, node_obs)[0])
+
+        torchopt.recover_state_dict(ac_k, ac_k_state_dict)
+
+        dist_k = []
+        for i in range(len(states)):
+            grid_obs = T.tensor(states[i]['grid'], dtype=T.float).to(self.device)
+            node_obs = T.cat(tuple([T.tensor(states[i][name], dtype=T.float) for name in self.node_name]), dim=1).to(
+                self.device)
+            dist_k.append(ac_k(grid_obs, node_obs)[0])
+
+        # KL Div between dsitributions of TB and AC_K, respectively
+        kl_div = sum([kl_divergence(dist_tb[i], dist_k[i]) for i in range(len(states))])
+
+        return kl_div
+
+    def plot_results(self):
+
+        cr = plt.figure(figsize=(10, 10))
+        plt.plot(self.cum_reward)
+        plt.xlabel('Steps')
+        plt.ylabel('Cumulative Reward')
+        plt.savefig('res/cumulative_reward')
+        plt.close(cr)
+
+        er = plt.figure(figsize=(10, 10))
+        plt.plot(list(range(1, 18_750 * 16 + 1, 16)), self.entropy_rate[-18_750:])
+        plt.xlabel('Steps (Last 300,000 of 4.8M steps)')
+        plt.ylabel('Entropy Rate')
+        plt.savefig('res/entropy_rate')
+        plt.close(er)
+
+    def run(self):
+
+        outer_range = self.steps // self.rollout_steps
+        outer_range = outer_range // (self.K_steps + self.L_steps)
+        ct = 0
+
+        for _ in range(outer_range):
+            for _ in range(self.K_steps):
+                loss = self.rollout()
+                self.actorcritic.optim.step(loss.sum())
+            k_state_dict = torchopt.extract_state_dict(self.actorcritic)
+
+            for _ in range(self.L_steps - 1):
+                loss = self.rollout()
+                self.actorcritic.optim.step(loss.sum())
+            k_l_m1_state_dict = torchopt.extract_state_dict(self.actorcritic)
+
+            bootstrap_loss, states = self.rollout(bootstrap=True)
+            for i in range(self.n_env):
+                self.actorcritic.optim.step(bootstrap_loss[i])
+
+            # KL-Div Matching loss
+            kl_matching_loss = self.kl_matching_function(self.ac_k, self.actorcritic, states, k_state_dict)
+
+            # MetaMLP update
+            self.meta_mlp.optim.zero_grad()
+            kl_matching_loss.sum().backward()
+            self.meta_mlp.optim.step()
+
+            # Use most recent params and stop grad
+            torchopt.recover_state_dict(self.actorcritic, k_l_m1_state_dict)
+            torchopt.stop_gradient(self.actorcritic)
+            torchopt.stop_gradient(self.actorcritic.optim)
+
+            ct += self.rollout_steps * ((self.K_steps + self.L_steps))
+
+            # print stats
+            if ct % 1000 == 0:
+                print(f"CR and ER, step# {ct}:")
+                print(self.cum_reward[-1])
+                print(self.entropy_rate[-1])
+                print("###")
+
+        self.save_models()
+
+    def save_models(self):
+        self.actorcritic.save_checkpoint()
+        self.meta_mlp.save_checkpoint()
+
+    def load_models(self):
+        self.actorcritic.load_checkpoint()
+        self.meta_mlp.load_checkpoint()
+
+
+if __name__ == "__main__":
+    '''Driver code'''
+
+    node_name = ['head_col', 'head_row', 'head_direction', 'tail_col', 'tail_row', 'tail_direction', 'portal_row',
+                 'portal_col']
+
+    steps = 5_000_000
+    K_steps = 3
+    L_steps = 5
+    rollout_steps = 16
+    random_seed = 5
+    n_env = 10
+    env = make_vec_env("GoogleSnake-v1", n_envs=n_env, env_kwargs={'config': config})
+    n_actions = 3
+    input_channel = env.observation_space['grid'].shape[0]
+    height, width = env.observation_space['grid'].shape[1:]
+    input_node = 0
+    for i in range(len(node_name)):
+        input_node += env.observation_space[node_name[i]].shape[0]
+    gamma = 0.99
+    alpha = 3e-4
+    m_alpha = 1e-4
+    betas = (0.9, 0.999)
+    eps = 1e-4
+    name = 'meta_agent_bmg'
+
+    # set seed
+    T.cuda.manual_seed(random_seed)
+    T.manual_seed(random_seed)
+    np.random.seed(random_seed)
+    random.seed(random_seed)
+
+    agent = Agent(
+        input_channel, height, width, input_node, n_actions, n_env,
+        gamma, alpha, m_alpha, betas, eps,
+        name, env, steps, K_steps, L_steps, rollout_steps, random_seed
+    )
+    env.reset()
+    agent.run()
+    print("done")
+    agent.plot_results()

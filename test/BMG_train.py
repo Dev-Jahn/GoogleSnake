@@ -7,7 +7,7 @@ from stable_baselines3.common.env_util import make_vec_env
 import wandb
 from wandb.integration.sb3 import WandbCallback
 
-from algs.bmg.bmg import BMG
+from algs import BMG
 from algs.bmg.policy_wrapper import MultiInputActorCriticPolicy
 from gsnake.env import GoogleSnakeEnv
 from gsnake.configs import GoogleSnakeConfig

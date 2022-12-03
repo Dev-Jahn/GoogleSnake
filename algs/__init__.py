@@ -1,3 +1,3 @@
-from algs.bmg.bmg import BMG
+from algs.bmg.bmg_sb3 import BMG
 
 __all__ = ['BMG']
