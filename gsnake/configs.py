@@ -2,6 +2,11 @@ import os
 import random
 from typing import Literal, get_args
 
+try:
+    import importlib.resources as pkg_resources
+except ImportError:
+    import importlib_resources as pkg_resources
+
 from .utils import SnakeState
 
 
@@ -69,12 +74,12 @@ class GoogleSnakeConfig:
             self.DEATH = -10 * reward_scale
             self.FOOD = 100 * reward_scale
             self.IDLE = 0 * reward_scale
-            self.DIST = 2
+            self.DIST = 0
         elif reward_mode == 'time_constrained':
             self.DEATH = -10 * reward_scale
             self.FOOD = 100 * reward_scale
             self.IDLE = -1 * reward_scale
-            self.DIST = 2
+            self.DIST = 0
         elif reward_mode == 'time_constrained_and_food':
             self.DEATH = -10
             self.FOOD = (self.height + self.width) * 2
@@ -89,12 +94,10 @@ class GoogleSnakeConfig:
 class GUIConfig:
     # General
     CAPTION = "Google Snake"
-
-    # PATHS
-    RESOURCE_ROOT = '../resource'
-    PATH_ICON = os.path.join(RESOURCE_ROOT, 'snake_logo.png')
-    PATH_APPLE = os.path.join(RESOURCE_ROOT, 'apple.png')
-    PATH_ANTI_APPLE = os.path.join(RESOURCE_ROOT, 'anti_apple.png')
+    from . import resource
+    F_ICON = pkg_resources.open_binary(resource, 'snake_logo.png')
+    F_APPLE = pkg_resources.open_binary(resource, 'apple.png')
+    F_ANTI_APPLE = pkg_resources.open_binary(resource, 'anti_apple.png')
 
     # Pixel sizes of elements
     TILE_W = 50

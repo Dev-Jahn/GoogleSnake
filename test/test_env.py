@@ -1,19 +1,10 @@
-import time
-
-from gym.envs.registration import register
-
 from gsnake.env import GoogleSnakeEnv
 from gsnake.configs import GoogleSnakeConfig
+from gsnake.utils import SnakeAction
 import pygame
 
 
 def main():
-    register(
-        id='GoogleSnake-v1',
-        entry_point=GoogleSnakeEnv,
-        max_episode_steps=500,
-    )
-
     config = GoogleSnakeConfig(
         # reward_mode='basic',
         multi_channel=True,
@@ -33,13 +24,19 @@ def main():
         event = pygame.event.wait()
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_LEFT:
-                env.step(0)
+                action = SnakeAction.LEFT
             elif event.key == pygame.K_UP:
-                env.step(1)
+                action = SnakeAction.FORWARD
             elif event.key == pygame.K_RIGHT:
-                env.step(2)
+                action = SnakeAction.RIGHT
             elif event.key == pygame.K_ESCAPE:
                 break
+            obs, reward, done, info = env.step(action)
+            print('reward: ', reward)
+            print(info)
+            if done:
+                print('Game Over')
+                env.reset()
             env.render()
 
     pygame.quit()

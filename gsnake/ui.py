@@ -37,10 +37,10 @@ class SnakeGUI(SnakeUI):
         self.screen.fill((0, 0, 0))
         pygame.display.set_caption("Google Snake")
         self.image_cache = {
-            SnakeState.FOOD: pygame.transform.scale(pygame.image.load(GUIConfig.PATH_APPLE),
+            SnakeState.FOOD: pygame.transform.scale(pygame.image.load(GUIConfig.F_APPLE),
                                                     (GUIConfig.TILE_W, GUIConfig.TILE_H)),
-            SnakeState.ANTI_FOOD: pygame.transform.scale(pygame.image.load(GUIConfig.PATH_ANTI_APPLE),
-                                                    (GUIConfig.TILE_W, GUIConfig.TILE_H)),
+            SnakeState.ANTI_FOOD: pygame.transform.scale(pygame.image.load(GUIConfig.F_ANTI_APPLE),
+                                                         (GUIConfig.TILE_W, GUIConfig.TILE_H)),
         }
         time.sleep(1)
         print('GUI initialized')
