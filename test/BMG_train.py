@@ -1,4 +1,5 @@
 import os
+import gym
 
 import torch
 import torchopt

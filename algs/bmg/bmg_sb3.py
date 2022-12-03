@@ -206,17 +206,21 @@ class BMG(OnPolicyAlgorithm):
             # Optimization step
             self.policy.optimizer.step(loss)
 
-        print(f'{self._n_updates + 1} inner updates')
-        print(f'{(self._n_updates + 1) % (self.K + self.L)} / K+L({self.K}+{self.L})')
-        for key, param in dict(self.policy.named_parameters()).items():
-            with torch.no_grad():
-                grad_norm = (param - param_grads[key]).norm().item()
-                print(f'{key:35}| Grad Norm | {grad_norm:.6f}')
-        print('=' * 80)
+        # For Gradient Monitoring
+        # print(f'{self._n_updates + 1} inner updates')
+        # print(f'{(self._n_updates + 1) % (self.K + self.L)} / K+L({self.K}+{self.L})')
+        # for key, param in dict(self.policy.named_parameters()).items():
+        #     with torch.no_grad():
+        #         grad_norm = (param - param_grads[key]).norm().item()
+        #         print(f'{key:35}| Grad Norm | {grad_norm:.6f}')
+        # print('=' * 80)
 
         # Logging
-        if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
-            self.logger.record("rollout/ep_food_taken_mean", max([info['food_taken'] for info in self.ep_info_buffer]))
+        # if len(self.ep_info_buffer) ==0:
+        #     self.logger.record("rollout/ep_food_taken_mean", 0)
+        # else:
+        #     self.logger.record(
+        #         "rollout/ep_food_taken_mean", np.mean([info['food_taken'] for info in self.ep_info_buffer]))
         explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
         self._n_updates += 1
         self.logger.record("train/n_updates", self._n_updates)

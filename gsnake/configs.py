@@ -77,9 +77,9 @@ class GoogleSnakeConfig:
             self.DIST = 2
         elif reward_mode == 'time_constrained_and_food':
             self.DEATH = -10
-            self.FOOD = 10
+            self.FOOD = (self.height + self.width) * 2
             self.IDLE = -1
-            self.DIST = 2
+            self.DIST = 0
 
     @property
     def grid_shape(self):

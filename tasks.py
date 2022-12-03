@@ -15,6 +15,7 @@ def train(c, method, nenv=10, device='cuda', postfix='base'):
         raise ValueError('Unknown method: {}'.format(method))
     main(n_env=int(nenv), device=device, postfix=postfix)
 
+
 @task
 def eval(c, method):
     if method == 'ppo':
@@ -26,6 +27,7 @@ def eval(c, method):
     else:
         raise ValueError('Unknown method: {}'.format(method))
     main()
+
 
 @task
 def test(c, **kwargs):
