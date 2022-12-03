@@ -1,5 +1,5 @@
 import sys
-sys.path.append("../../../../..")
+sys.path.append("../..")
 
 from functools import reduce
 import torch as T
