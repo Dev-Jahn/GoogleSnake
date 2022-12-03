@@ -21,13 +21,12 @@ from stable_baselines3.common.env_util import make_vec_env
 register(
     id='GoogleSnake-v1',
     entry_point=GoogleSnakeEnv,
-    max_episode_steps=5000,
+    max_episode_steps=2000,
 )
 
 name = '5000_dir_channel_50M'
 
 config = GoogleSnakeConfig(
-    # reward_mode='basic',
     multi_channel=True,
     direction_channel=True,
     reward_mode='time_constrained_and_food',
@@ -198,10 +197,8 @@ class Agent:
             obs = obs_
 
             # No need, since non-episodic
-            '''
             if done:
                 break
-            '''
 
         grid_obs = T.tensor(obs_['grid'], dtype=T.float).to(self.device)
         node_obs = T.cat(tuple([T.tensor(obs_[name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
@@ -336,7 +333,7 @@ if __name__ == "__main__":
     steps = 4_800_000
     K_steps = 3
     L_steps = 5
-    rollout_steps = 16
+    rollout_steps = 32
     random_seed = 5
     env = make_vec_env("GoogleSnake-v1", n_envs=1, env_kwargs={'config':config})
     n_actions = 3
