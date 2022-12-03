@@ -13,7 +13,8 @@ class GoogleSnakeEnv(Env):
         self.config = config
         self.seed = seed
         self.action_space = spaces.Discrete(n=3)
-        self.observation_space = SnakeObservation(self.config.grid_shape, multi_channel=self.config.multi_channel, direction_channel=self.config.direction_channel)
+        self.observation_space = SnakeObservation(self.config.grid_shape, multi_channel=self.config.multi_channel,
+                                                  direction_channel=self.config.direction_channel)
         self.state = SnakeGrid(self.config, seed=seed)
         self.food_taken = 0
 
@@ -36,7 +37,8 @@ class GoogleSnakeEnv(Env):
         assert self.action_space.contains(action)
         # Get the new head position
         new_head_pos, new_head_direction = self.state.next_head_position(action)
-        if self.config.loop:    new_head_pos = (new_head_pos[0] % self.config.grid_shape[0], new_head_pos[1] % self.config.grid_shape[1])
+        if self.config.loop:
+            new_head_pos = (new_head_pos[0] % self.config.grid_shape[0], new_head_pos[1] % self.config.grid_shape[1])
         # If the snake is dead, terminate the episode with a negative reward
         if self.state.is_dead(*new_head_pos):
             self.state.reset()
@@ -47,6 +49,7 @@ class GoogleSnakeEnv(Env):
 
         # Check if the snake eats food
         eat_food = self.state.grid[new_head_pos] == SnakeState.FOOD.value
+        dist = self.state.closest_food_dist()
         eat_anti_food = self.state.grid[new_head_pos] == SnakeState.ANTI_FOOD.value
 
         self.state.remove_apple_node(new_head_pos, eat_food=eat_food, eat_anti_food=eat_anti_food)
@@ -66,11 +69,16 @@ class GoogleSnakeEnv(Env):
             # head and tail are flipped when snake eats food
             if self.config.reverse:
                 self.state.reverse_snake()
+        # Distance based reward
+        elif self.state.closest_food_dist() - dist < 0:
+            reward += self.config.DIST
+        elif self.state.closest_food_dist() - dist > 0:
+            reward -= self.config.DIST
 
         if self.config.moving:
             self.state.move_apple()
 
-        return self.observation_space.convert(self.state), reward, False, {}
+        return self.observation_space.convert(self.state), reward, False, {'food_taken': self.food_taken}
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         self.state.reset()

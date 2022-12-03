@@ -1,22 +1,27 @@
+import os
+
 import torch
+import torchopt
 from gym.envs.registration import register
-from stable_baselines3 import *
 from stable_baselines3.common.env_util import make_vec_env
 import wandb
 from wandb.integration.sb3 import WandbCallback
+
+from algs.bmg.bmg import BMG
+from algs.bmg.policy_wrapper import MultiInputActorCriticPolicy
 from gsnake.env import GoogleSnakeEnv
 from gsnake.configs import GoogleSnakeConfig
 from utils import ensure_dir
 
 
-def main(n_env=10, n_steps=16, max_ep_steps=1000, max_steps=1_000_000, postfix='base', device="cuda"):
+def main(n_env=10, K=7, L=9, n_steps=16, max_ep_steps=1000, max_steps=1_000_000, postfix='base', device="cuda"):
     register(
         id='GoogleSnake-v1',
         entry_point=GoogleSnakeEnv,
         max_episode_steps=max_ep_steps,
     )
     rootpath = 'ckpt/GoogleSnake-v1'
-    name = f'PPO_max{max_ep_steps}_step{max_steps / 1e+6:.1f}M_{n_env}env_{postfix}'
+    name = f'BMG_max{max_ep_steps}_step{max_steps/1e+6:.1f}M_{n_env}env_{postfix}'
     savepath = os.path.join(rootpath, name)
     ensure_dir(savepath)
 
@@ -39,14 +44,20 @@ def main(n_env=10, n_steps=16, max_ep_steps=1000, max_steps=1_000_000, postfix='
     )
     # Parallel environments
     env = make_vec_env("GoogleSnake-v1", n_envs=n_env, env_kwargs={'config': config})
-    policy_kwargs = {'normalize_images': False}
-    model = PPO(
-        "MultiInputPolicy",
-        env,
+    policy_kwargs = {
+        'normalize_images': False,
+        'optimizer_class': torchopt.MetaSGD,
+    }
+    model = BMG(
+        MultiInputActorCriticPolicy, env, K=K, L=L,
+        meta_window_size=10,
+        learning_rate=1e-1,
         n_steps=n_steps,
-        batch_size=n_env*n_steps,
+        meta_learning_rate=1e-4,
         policy_kwargs=policy_kwargs,
-        verbose=0, tensorboard_log=f'runs/{run.id}')
+        verbose=0, tensorboard_log=f'runs/{run.id}',
+        device=device
+    )
     model.learn(
         total_timesteps=max_steps,
         callback=WandbCallback(model_save_path=savepath, verbose=2)

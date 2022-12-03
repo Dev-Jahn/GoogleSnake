@@ -1,3 +1,4 @@
+import os
 from time import sleep
 
 from gym.envs.registration import register
@@ -17,14 +18,18 @@ register(
 ####################################################################
 # Human evaluation
 ####################################################################
-model = PPO.load("PPO_2000_max_step_nch_50M/model")
+modelpath = 'ckpt'
+name = '5000_dir_channel_50M'
+model = PPO.load(os.path.join(modelpath, name, 'model'))
 config = GoogleSnakeConfig(
     # reward_mode='basic',
     multi_channel=True,
+    direction_channel=True,
     reward_mode='time_constrained_and_food',
-    direction_channel=False,
+    reward_scale=1,
     n_foods=3
 )
+
 env = GoogleSnakeEnv(config, 42, "gui")
 obs = env.reset()
 try:

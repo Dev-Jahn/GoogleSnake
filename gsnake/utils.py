@@ -22,7 +22,6 @@ class SnakeState(IntEnum):
     OBSTACLE = auto()
     EMPTY = auto()
 
-
     def __str__(self):
         return f'{self.name}<{self.value}>'
 
@@ -44,7 +43,6 @@ class SnakeState(IntEnum):
         :return: number of states including SNAKE, EMPTY, FOOD and etc
         """
         return len([enum for enum in SnakeState if not enum.name.startswith('SNAKE')]) + 1
-
 
 
 @unique
@@ -138,7 +136,7 @@ class SnakeNode:
         :return: The other node
         """
         assert isinstance(other, SnakeNode)
-        # assert self.row == other.row or self.col == other.col
+        assert self.row == other.row or self.col == other.col
         if self.row == other.row:
             if self.col < other.col:
                 other.direction = SnakeState.SNAKE_L
@@ -169,10 +167,12 @@ class SnakeNode:
         if self.next_node is not None:
             self.next_node.prev_node = None
 
+
 class AppleNode:
     """
         Node of the apple
     """
+
     def __init__(self, direction, anti_direction, *pos):
         self.direction = direction
         self.anti_direction = anti_direction
@@ -297,7 +297,8 @@ class SnakeGrid:
         while cursor is not None:
             cursor.direction, cursor.pos = self.next_apple_position(cursor.direction, cursor.pos, anti=False)
             if self.config.portal or self.config.poison:
-                cursor.anti_direction, cursor.anti_pos = self.next_apple_position(cursor.anti_direction, cursor.anti_pos, anti=True)
+                cursor.anti_direction, cursor.anti_pos = self.next_apple_position(cursor.anti_direction,
+                                                                                  cursor.anti_pos, anti=True)
             cursor = cursor.next_node
 
     def next_apple_position(self, direction, pos, anti=False):
@@ -344,8 +345,8 @@ class SnakeGrid:
         result = list()
         generate_num = 0
         H, W = self.config.grid_shape
-        px = [-1,0,1,1,1,0,-1,-1]
-        py = [-1,-1,-1,0,1,1,1,0]
+        px = [-1, 0, 1, 1, 1, 0, -1, -1]
+        py = [-1, -1, -1, 0, 1, 1, 1, 0]
         while generate_num < n:
             x, y, flag = np.random.randint(W), np.random.randint(H), 0
             if not self.grid[y, x] == SnakeState.EMPTY:   continue
@@ -367,9 +368,19 @@ class SnakeGrid:
         """
         H, W = self.config.grid_shape
         obstacles_num = len(np.argwhere(self.grid == SnakeState.OBSTACLE))
-        if H * W // (obstacles_num * 11)  == 0:     return True
-        else:                                       return False
+        if H * W // (obstacles_num * 11) == 0:
+            return True
+        else:
+            return False
 
+    def closest_food_dist(self):
+        """
+        Find distance between the closest food to the head of the snake
+        :return: Euclidean distance between the head and the closest food
+        """
+        food = np.argwhere(self.grid == SnakeState.FOOD)
+        head = np.array(self.head.pos)
+        return np.min(np.linalg.norm(food - head, axis=1))
 
     def reverse_snake(self):
         """
@@ -467,8 +478,7 @@ class SnakeGrid:
         eat_poison_food = self.config.poison and eat_anti_food
         eat_food = (not eat_poison_food) and (eat_food or eat_anti_food)
 
-        # Destroy the ta
-        # il node
+        # Destroy the tail node
         if not eat_food:
             self.grid[self.tail.pos] = SnakeState.EMPTY
             self.tail.destroy()
@@ -540,6 +550,11 @@ class SnakeObservation(Dict):
     """
 
     def __init__(self, shape, multi_channel=False, direction_channel=False, dtype=np.uint8):
+        """
+        :param shape: Shape of the observation grid
+        :param multi_channel: If True, the observation grid will be a 3-channel one-hot grid
+        :param direction_channel: If False, treat snake directions as the same, else expose internal direction info
+        """
         self.encodings = {
             SnakeState.EMPTY: 0,
             **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
@@ -555,7 +570,7 @@ class SnakeObservation(Dict):
         }
 
         # -1 for binary representation except SnakeState.EMPTY
-        self.n_states = SnakeState.n_states_external() if not direction_channel else SnakeState.n_states_internal()
+        self.n_states = SnakeState.n_states_internal() if direction_channel else SnakeState.n_states_external()
         self.n_channels = 1 if not multi_channel else self.n_states - 1
         space_dict = {}
         if multi_channel:
@@ -571,8 +586,8 @@ class SnakeObservation(Dict):
             'tail_row': OneHotBox(shape[1]),
             'tail_col': OneHotBox(shape[2]),
             'tail_direction': OneHotBox(4),
-            'portal_row': OneHotBox(shape[1]+1),
-            'portal_col': OneHotBox(shape[2]+1)
+            # 'portal_row': OneHotBox(shape[1]+1),
+            # 'portal_col': OneHotBox(shape[2]+1)
         }))
         super(SnakeObservation, self).__init__(space_dict)
         self.dtype = dtype
@@ -584,7 +599,6 @@ class SnakeObservation(Dict):
         :param obs: np.ndarray of shape (row, col) containing the internal states
         :return: np.ndarray of shape (row, col) containing the observation space
         """
-
         return np.vectorize(self.encodings.get)(obs).astype(self.dtype)
 
     def convert(self, state: SnakeGrid):
@@ -600,6 +614,9 @@ class SnakeObservation(Dict):
             obs = self.encode(obs)[None, ...]
         else:
             # One-hot encoding
+            # obs.shape = (H, W)
+            # self.encode(obs).shape = (H, W) (with encoded labels)
+            # ohe.shape = (H, W, n_states) (order is the same as self.encodings)
             ohe = np.eye(self.n_states, dtype=self.dtype)[self.encode(obs)]
             # Cut off the first channel containing SnakeState.EMPTY
             obs = ohe.transpose((-1, *list(range(len(ohe.shape))[:-1])))[1:]
@@ -612,20 +629,23 @@ class SnakeObservation(Dict):
             'tail_row': np.eye(state.grid.shape[0], dtype=self.dtype)[state.tail.pos[0]],
             'tail_col': np.eye(state.grid.shape[1], dtype=self.dtype)[state.tail.pos[1]],
             'tail_direction': np.eye(4, dtype=self.dtype)[state.tail.direction - min(SnakeState)],
-            'portal_row': np.eye(state.grid.shape[0]+1, dtype=self.dtype)[0] if (state.next_portal_position is None) else\
-                          np.eye(state.grid.shape[0]+1, dtype=self.dtype)[state.next_portal_position[0]],
-            'portal_col': np.eye(state.grid.shape[1]+1, dtype=self.dtype)[0] if (state.next_portal_position is None) else\
-                          np.eye(state.grid.shape[1]+1, dtype=self.dtype)[state.next_portal_position[1]]
+            # 'portal_row': np.eye(state.grid.shape[0] + 1, dtype=self.dtype)[0] if (
+            #             state.next_portal_position is None) else \
+            #     np.eye(state.grid.shape[0] + 1, dtype=self.dtype)[state.next_portal_position[0]],
+            # 'portal_col': np.eye(state.grid.shape[1] + 1, dtype=self.dtype)[0] if (
+            #             state.next_portal_position is None) else \
+            #     np.eye(state.grid.shape[1] + 1, dtype=self.dtype)[state.next_portal_position[1]]
         })
         assert self['grid'].contains(obs_dict['grid']), f'grid does not match with the observation space'
         assert self['head_row'].contains(obs_dict['head_row']), f'head_row does not match with the observation space'
         assert self['head_col'].contains(obs_dict['head_col']), f'head_col does not match with the observation space'
-        assert self['head_direction'].contains(obs_dict['head_direction']), f'direction does not match with the observation space'
+        assert self['head_direction'].contains(
+            obs_dict['head_direction']), f'direction does not match with the observation space'
         assert self['tail_row'].contains(obs_dict['tail_row']), f'head_row does not match with the observation space'
         assert self['tail_col'].contains(obs_dict['tail_col']), f'head_col does not match with the observation space'
         assert self['tail_direction'].contains(obs_dict['tail_direction']), f'direction does not match with the observation space'
-        assert self['portal_row'].contains(obs_dict['portal_row']), f'direction does not match with the observation space'
-        assert self['portal_col'].contains(obs_dict['portal_col']), f'direction does not match with the observation space'
+        # assert self['portal_row'].contains(obs_dict['portal_row']), f'direction does not match with the observation space'
+        # assert self['portal_col'].contains(obs_dict['portal_col']), f'direction does not match with the observation space'
         assert self.contains(obs_dict), f'Observation does not match with the observation space'
 
         return obs_dict
