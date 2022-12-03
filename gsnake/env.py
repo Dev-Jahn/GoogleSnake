@@ -41,8 +41,7 @@ class GoogleSnakeEnv(Env):
             new_head_pos = (new_head_pos[0] % self.config.grid_shape[0], new_head_pos[1] % self.config.grid_shape[1])
         # If the snake is dead, terminate the episode with a negative reward
         if self.state.is_dead(*new_head_pos):
-            self.state.reset()
-            return self.observation_space.convert(self.state), self.config.DEATH, True, {}
+            return self.observation_space.convert(self.state), self.config.DEATH, True, {'food_taken': self.food_taken}
 
         # Update the internal state grid
         new_head = SnakeNode(*new_head_pos, direction=new_head_direction)

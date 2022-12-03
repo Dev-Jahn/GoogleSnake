@@ -21,7 +21,7 @@ def main(n_env=10, K=7, L=9, n_steps=16, max_ep_steps=1000, max_steps=1_000_000,
         max_episode_steps=max_ep_steps,
     )
     rootpath = 'ckpt/GoogleSnake-v1'
-    name = f'BMG_max{max_ep_steps}_step{max_steps/1e+6:.1f}M_{n_env}env_{postfix}'
+    name = f'BMG_max{max_ep_steps}_step{max_steps / 1e+6:.1f}M_{n_env}env_{postfix}'
     savepath = os.path.join(rootpath, name)
     ensure_dir(savepath)
 
@@ -43,7 +43,11 @@ def main(n_env=10, K=7, L=9, n_steps=16, max_ep_steps=1000, max_steps=1_000_000,
         monitor_gym=False
     )
     # Parallel environments
-    env = make_vec_env("GoogleSnake-v1", n_envs=n_env, env_kwargs={'config': config})
+    env = make_vec_env(
+        "GoogleSnake-v1", n_envs=n_env,
+        env_kwargs={'config': config},
+        monitor_kwargs=dict(info_keywords=("food_taken",))
+    )
     policy_kwargs = {
         'normalize_images': False,
         'optimizer_class': torchopt.MetaSGD,

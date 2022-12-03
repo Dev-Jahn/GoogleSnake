@@ -67,7 +67,7 @@ class BMG(OnPolicyAlgorithm):
             gamma: float = 0.99,
             gae_lambda: float = 1.0,
             normalize_advantage: bool = True,
-            vf_coef: float = 0.3,
+            vf_coef: float = 0.4,
             max_grad_norm: float = 0.5,
             use_sde: bool = False,
             sde_sample_freq: int = -1,
@@ -215,7 +215,8 @@ class BMG(OnPolicyAlgorithm):
         print('=' * 80)
 
         # Logging
-        self.logger.record("rollout/max_food_taken", max([info['food_taken'] for info in self.ep_info_buffer]))
+        if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
+            self.logger.record("rollout/ep_food_taken_mean", max([info['food_taken'] for info in self.ep_info_buffer]))
         explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
         self._n_updates += 1
         self.logger.record("train/n_updates", self._n_updates)
@@ -267,10 +268,10 @@ class BMG(OnPolicyAlgorithm):
             eval_env: Optional[GymEnv] = None,
             eval_freq: int = -1,
             n_eval_episodes: int = 5,
-            tb_log_name: str = "PPO",
+            tb_log_name: str = "BMG",
             eval_log_path: Optional[str] = None,
             reset_num_timesteps: bool = True,
-            progress_bar: bool = False,
+            progress_bar: bool = True,
     ):
         """
         Collects rollouts at self.rollout_buffer, call self.train() and update self.num_timesteps.
