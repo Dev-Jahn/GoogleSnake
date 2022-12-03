@@ -1,5 +1,4 @@
 import sys
-
 sys.path.append("../../../../..")
 
 from functools import reduce
@@ -35,11 +34,9 @@ config = GoogleSnakeConfig(
     n_foods=3
 )
 
-
 class ActorCritic(nn.Module):
 
-    def __init__(self, input_channel, height, width, input_node, n_actions, alpha, fc0_dims=640, fc1_dims=256,
-                 fc2_dims=256, gamma=0.99):
+    def __init__(self, input_channel, height, width, input_node, n_actions, alpha, fc0_dims=640, fc1_dims=256, fc2_dims=256, gamma=0.99):
         super(ActorCritic, self).__init__()
         self.chkpt_file = os.path.join("ActorCritic" + '_bmg')
 
@@ -74,6 +71,7 @@ class ActorCritic(nn.Module):
         self.to(self.device)
 
     def forward(self, grid, nodes):
+
         x1 = self.grid_convolution(grid)
         x2 = self.node_linear(nodes)
 
@@ -135,8 +133,7 @@ class MetaMLP(nn.Module):
 
 
 class Agent:
-    def __init__(self, input_channel, height, width, input_node, n_actions, n_env, gamma, alpha, m_alpha, betas, eps,
-                 name,
+    def __init__(self, input_channel, height, width, input_node, n_actions, n_env, gamma, alpha, m_alpha, betas, eps, name,
                  env, steps, K_steps, L_steps, rollout_steps, random_seed):
         super(Agent, self).__init__()
 
@@ -146,8 +143,7 @@ class Agent:
 
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
 
-        self.node_name = ['head_col', 'head_row', 'head_direction', 'tail_col', 'tail_row', 'tail_direction',
-                          'portal_row', 'portal_col']
+        self.node_name = ['head_col', 'head_row', 'head_direction', 'tail_col', 'tail_row', 'tail_direction', 'portal_row', 'portal_col']
 
         self.env = env
         self.name = f"agent_{name}"
@@ -164,9 +160,6 @@ class Agent:
         self.random_seed = random_seed
         self.gamma = gamma
 
-        self.total_done_reward = []
-        self.total_done_reward_step = []
-
         # stats
         self.avg_reward = [0 for _ in range(10)]
         self.accum_reward = 0
@@ -177,13 +170,12 @@ class Agent:
     def rollout(self, bootstrap=False):
         log_probs, values, rewards, masks, states = [], [], [], [], []
         rollout_reward, entropy = 0, 0
-        # obs = self.env.reset()
+        #obs = self.env.reset()
         obs = self.last_obs
         done = False
         for _ in range(self.rollout_steps):
             grid_obs = T.tensor(obs['grid'], dtype=T.float).to(self.device)
-            node_obs = T.cat(tuple([T.tensor(obs[name], dtype=T.float) for name in self.node_name]), dim=1).to(
-                self.device)
+            node_obs = T.cat(tuple([T.tensor(obs[name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
             dist, v = self.actorcritic(grid_obs, node_obs)
 
             action = dist.sample()
@@ -209,12 +201,9 @@ class Agent:
             self.last_obs = obs_
 
             # No need, since non-episodic
-            '''
-            if done:
-                self.env.reset()
-                self.total_done_reward.append(rollout_reward)
+            if True in done:
+                self.last_obs = self.env.reset()
                 break
-            '''
 
         grid_obs = T.tensor(obs_['grid'], dtype=T.float).to(self.device)
         node_obs = T.cat(tuple([T.tensor(obs_[name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
@@ -257,8 +246,7 @@ class Agent:
             dist_tb = []
             for i in range(len(states)):
                 grid_obs = T.tensor(states[i]['grid'], dtype=T.float).to(self.device)
-                node_obs = T.cat(tuple([T.tensor(states[i][name], dtype=T.float) for name in self.node_name]),
-                                 dim=1).to(self.device)
+                node_obs = T.cat(tuple([T.tensor(states[i][name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
                 dist_tb.append(tb(grid_obs, node_obs)[0])
 
         torchopt.recover_state_dict(ac_k, ac_k_state_dict)
@@ -266,8 +254,7 @@ class Agent:
         dist_k = []
         for i in range(len(states)):
             grid_obs = T.tensor(states[i]['grid'], dtype=T.float).to(self.device)
-            node_obs = T.cat(tuple([T.tensor(states[i][name], dtype=T.float) for name in self.node_name]), dim=1).to(
-                self.device)
+            node_obs = T.cat(tuple([T.tensor(states[i][name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
             dist_k.append(ac_k(grid_obs, node_obs)[0])
 
         # KL Div between dsitributions of TB and AC_K, respectively
@@ -300,24 +287,23 @@ class Agent:
         for _ in range(outer_range):
             for _ in range(self.K_steps):
                 loss = self.rollout()
-                self.actorcritic.optim.step(loss.sum())
+                self.actorcritic.optim.step(loss.mean())
             k_state_dict = torchopt.extract_state_dict(self.actorcritic)
 
             for _ in range(self.L_steps - 1):
                 loss = self.rollout()
-                self.actorcritic.optim.step(loss.sum())
+                self.actorcritic.optim.step(loss.mean())
             k_l_m1_state_dict = torchopt.extract_state_dict(self.actorcritic)
 
             bootstrap_loss, states = self.rollout(bootstrap=True)
-            for i in range(self.n_env):
-                self.actorcritic.optim.step(bootstrap_loss[i])
+            self.actorcritic.optim.step(bootstrap_loss.mean())
 
             # KL-Div Matching loss
             kl_matching_loss = self.kl_matching_function(self.ac_k, self.actorcritic, states, k_state_dict)
 
             # MetaMLP update
             self.meta_mlp.optim.zero_grad()
-            kl_matching_loss.sum().backward()
+            kl_matching_loss.mean().backward()
             self.meta_mlp.optim.step()
 
             # Use most recent params and stop grad
@@ -345,11 +331,12 @@ class Agent:
         self.meta_mlp.load_checkpoint()
 
 
+
+
 if __name__ == "__main__":
     '''Driver code'''
 
-    node_name = ['head_col', 'head_row', 'head_direction', 'tail_col', 'tail_row', 'tail_direction', 'portal_row',
-                 'portal_col']
+    node_name = ['head_col', 'head_row', 'head_direction', 'tail_col', 'tail_row', 'tail_direction', 'portal_row', 'portal_col']
 
     steps = 5_000_000
     K_steps = 3
@@ -357,7 +344,7 @@ if __name__ == "__main__":
     rollout_steps = 16
     random_seed = 5
     n_env = 10
-    env = make_vec_env("GoogleSnake-v1", n_envs=n_env, env_kwargs={'config': config})
+    env = make_vec_env("GoogleSnake-v1", n_envs=n_env, env_kwargs={'config':config})
     n_actions = 3
     input_channel = env.observation_space['grid'].shape[0]
     height, width = env.observation_space['grid'].shape[1:]
@@ -377,12 +364,12 @@ if __name__ == "__main__":
     np.random.seed(random_seed)
     random.seed(random_seed)
 
-    agent = Agent(
-        input_channel, height, width, input_node, n_actions, n_env,
-        gamma, alpha, m_alpha, betas, eps,
-        name, env, steps, K_steps, L_steps, rollout_steps, random_seed
-    )
+    agent = Agent(input_channel, height, width, input_node, n_actions, n_env, gamma, alpha, m_alpha, betas, eps, name, env,
+                  steps, K_steps, L_steps, rollout_steps, random_seed)
     env.reset()
     agent.run()
     print("done")
     agent.plot_results()
+
+
+
