@@ -136,7 +136,8 @@ class SnakeNode:
         :return: The other node
         """
         assert isinstance(other, SnakeNode)
-        assert self.row == other.row or self.col == other.col
+        # removed for portal option
+        # assert self.row == other.row or self.col == other.col
         if self.row == other.row:
             if self.col < other.col:
                 other.direction = SnakeState.SNAKE_L
@@ -643,9 +644,12 @@ class SnakeObservation(Dict):
             obs_dict['head_direction']), f'direction does not match with the observation space'
         assert self['tail_row'].contains(obs_dict['tail_row']), f'head_row does not match with the observation space'
         assert self['tail_col'].contains(obs_dict['tail_col']), f'head_col does not match with the observation space'
-        assert self['tail_direction'].contains(obs_dict['tail_direction']), f'direction does not match with the observation space'
-        # assert self['portal_row'].contains(obs_dict['portal_row']), f'direction does not match with the observation space'
-        # assert self['portal_col'].contains(obs_dict['portal_col']), f'direction does not match with the observation space'
+        assert self['tail_direction'].contains(
+            obs_dict['tail_direction']), f'direction does not match with the observation space'
+        assert self['portal_row'].contains(
+            obs_dict['portal_row']), f'direction does not match with the observation space'
+        assert self['portal_col'].contains(
+            obs_dict['portal_col']), f'direction does not match with the observation space'
         assert self.contains(obs_dict), f'Observation does not match with the observation space'
 
         return obs_dict
