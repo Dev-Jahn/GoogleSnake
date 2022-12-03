@@ -38,7 +38,7 @@ class ActorCritic(nn.Module):
 
     def __init__(self, input_channel, height, width, input_node, n_actions, alpha, fc0_dims=640, fc1_dims=256, fc2_dims=256, gamma=0.99):
         super(ActorCritic, self).__init__()
-        self.chkpt_file = os.path.join("todo" + '_bmg')
+        self.chkpt_file = os.path.join("ActorCritic" + '_bmg')
 
         hidden_channel = [32, 64, 64]
         hidden_nodes = [256, 256, 256]
@@ -109,7 +109,7 @@ class ActorCritic(nn.Module):
 class MetaMLP(nn.Module):
     def __init__(self, alpha, betas=(0.9, 0.999), eps=1e-4, input_dims=10, fc1_dims=64):
         super(MetaMLP, self).__init__()
-        self.chkpt_file = os.path.join("todo" + '_bmg')
+        self.chkpt_file = os.path.join("MetaMLP" + '_bmg')
 
         self.fc1 = nn.Linear(input_dims, fc1_dims)
         self.fc2 = nn.Linear(fc1_dims, 1)
@@ -133,7 +133,7 @@ class MetaMLP(nn.Module):
 
 
 class Agent:
-    def __init__(self, input_channel, height, width, input_node, n_actions, gamma, alpha, m_alpha, betas, eps, name,
+    def __init__(self, input_channel, height, width, input_node, n_actions, n_env, gamma, alpha, m_alpha, betas, eps, name,
                  env, steps, K_steps, L_steps, rollout_steps, random_seed):
         super(Agent, self).__init__()
 
@@ -148,6 +148,7 @@ class Agent:
         self.env = env
         self.name = f"agent_{name}"
         self.n_actions = n_actions
+        self.n_env = n_env
         self.input_channel = input_channel
         self.height = height
         self.width = width
@@ -203,17 +204,19 @@ class Agent:
             self.last_obs = obs_
 
             # No need, since non-episodic
+            '''
             if done:
                 self.env.reset()
                 self.total_done_reward.append(rollout_reward)
                 break
+            '''
 
         grid_obs = T.tensor(obs_['grid'], dtype=T.float).to(self.device)
         node_obs = T.cat(tuple([T.tensor(obs_[name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
         _, v = self.actorcritic(grid_obs, node_obs)
 
         # Calc discounted returns
-        R = v
+        R = v.T
         discounted_returns = []
         for step in reversed(range(len(rewards))):
             # R = rewards[step] + self.gamma * R * masks[step]
@@ -230,13 +233,14 @@ class Agent:
         self.entropy_rate.append(eps_en.item())
 
         log_probs = T.cat(log_probs)
-        values = T.cat(values)
-        returns = T.cat(discounted_returns)
+        values = T.cat(values, dim=1).T
+        returns = T.cat(discounted_returns, dim=0)
+
         advantage = returns - values
 
         # Compute losses
-        actor_loss = -T.mean((log_probs * advantage.detach()))
-        critic_loss = 0.5 * T.mean(advantage.pow(2))
+        actor_loss = -T.mean((log_probs * advantage.detach()), dim=0)
+        critic_loss = 0.5 * T.mean(advantage.pow(2), dim=0)
 
         if bootstrap:
             return actor_loss, states
@@ -289,23 +293,24 @@ class Agent:
         for _ in range(outer_range):
             for _ in range(self.K_steps):
                 loss = self.rollout()
-                self.actorcritic.optim.step(loss)
+                self.actorcritic.optim.step(loss.sum())
             k_state_dict = torchopt.extract_state_dict(self.actorcritic)
 
             for _ in range(self.L_steps - 1):
                 loss = self.rollout()
-                self.actorcritic.optim.step(loss)
+                self.actorcritic.optim.step(loss.sum())
             k_l_m1_state_dict = torchopt.extract_state_dict(self.actorcritic)
 
             bootstrap_loss, states = self.rollout(bootstrap=True)
-            self.actorcritic.optim.step(bootstrap_loss)
+            for i in range(self.n_env):
+                self.actorcritic.optim.step(bootstrap_loss[i])
 
             # KL-Div Matching loss
             kl_matching_loss = self.kl_matching_function(self.ac_k, self.actorcritic, states, k_state_dict)
 
             # MetaMLP update
             self.meta_mlp.optim.zero_grad()
-            kl_matching_loss.backward()
+            kl_matching_loss.sum().backward()
             self.meta_mlp.optim.step()
 
             # Use most recent params and stop grad
@@ -321,6 +326,8 @@ class Agent:
                 print(self.cum_reward[-1])
                 print(self.entropy_rate[-1])
                 print("###")
+
+        self.save_models()
 
     def save_models(self):
         self.actorcritic.save_checkpoint()
@@ -338,12 +345,13 @@ if __name__ == "__main__":
 
     node_name = ['head_col', 'head_row', 'head_direction', 'tail_col', 'tail_row', 'tail_direction', 'portal_row', 'portal_col']
 
-    steps = 48_000_000
+    steps = 5_000_000
     K_steps = 3
     L_steps = 5
     rollout_steps = 16
     random_seed = 5
-    env = make_vec_env("GoogleSnake-v1", n_envs=1, env_kwargs={'config':config})
+    n_env = 10
+    env = make_vec_env("GoogleSnake-v1", n_envs=n_env, env_kwargs={'config':config})
     n_actions = 3
     input_channel = env.observation_space['grid'].shape[0]
     height, width = env.observation_space['grid'].shape[1:]
@@ -363,7 +371,7 @@ if __name__ == "__main__":
     np.random.seed(random_seed)
     random.seed(random_seed)
 
-    agent = Agent(input_channel, height, width, input_node, n_actions, gamma, alpha, m_alpha, betas, eps, name, env,
+    agent = Agent(input_channel, height, width, input_node, n_actions, n_env, gamma, alpha, m_alpha, betas, eps, name, env,
                   steps, K_steps, L_steps, rollout_steps, random_seed)
     env.reset()
     agent.run()
