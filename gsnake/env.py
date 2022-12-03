@@ -13,7 +13,8 @@ class GoogleSnakeEnv(Env):
         self.config = config
         self.seed = seed
         self.action_space = spaces.Discrete(n=3)
-        self.observation_space = SnakeObservation(self.config.grid_shape, multi_channel=self.config.multi_channel, direction_channel=self.config.direction_channel)
+        self.observation_space = SnakeObservation(self.config.grid_shape, multi_channel=self.config.multi_channel,
+                                                  direction_channel=self.config.direction_channel)
         self.state = SnakeGrid(self.config, seed=seed)
         self.food_taken = 0
 
@@ -36,7 +37,8 @@ class GoogleSnakeEnv(Env):
         assert self.action_space.contains(action)
         # Get the new head position
         new_head_pos = SnakeAction.absolute_position(self.state.head.direction, action)(*self.state.head.pos)
-        if self.config.loop:    new_head_pos = (new_head_pos[0] % self.config.grid_shape[0], new_head_pos[1] % self.config.grid_shape[1])
+        if self.config.loop:    new_head_pos = (
+            new_head_pos[0] % self.config.grid_shape[0], new_head_pos[1] % self.config.grid_shape[1])
         # If the snake is dead, terminate the episode with a negative reward
         if self.state.is_dead(*new_head_pos):
             self.state.reset()
@@ -78,7 +80,8 @@ class GoogleSnakeEnv(Env):
         if self.config.moving:
             self.state.move_apple()
 
-        return self.observation_space.convert(self.state), reward, False, {}
+        return self.observation_space.convert(self.state), reward, False, {'food_taken': self.food_taken}
+        # return self.observation_space.convert(self.state), reward, False, {'episode': {'food_taken': self.food_taken}}
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         self.state.reset()

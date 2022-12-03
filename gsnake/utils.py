@@ -43,7 +43,6 @@ class SnakeState(IntEnum):
         return len([enum for enum in SnakeState if not enum.name.startswith('SNAKE')]) + 1
 
 
-
 @unique
 class SnakeAction(IntEnum):
     """
@@ -166,10 +165,12 @@ class SnakeNode:
         if self.next_node is not None:
             self.next_node.prev_node = None
 
+
 class AppleNode:
     """
         Node of the apple
     """
+
     def __init__(self, row, col, direction):
         self.pos = row, col
         self.direction = direction
@@ -267,8 +268,8 @@ class SnakeGrid:
     def move_apple(self):
         cursor = self.first_food
         while cursor is not None:
-            plus_row = [0,-1,0,1,0]
-            plus_col = [0,0,1,0,-1]
+            plus_row = [0, -1, 0, 1, 0]
+            plus_col = [0, 0, 1, 0, -1]
 
             dir = cursor.direction
             reverse_dir = (cursor.direction + 1) % 4 + 1
@@ -312,8 +313,8 @@ class SnakeGrid:
         result = list()
         generate_num = 0
         H, W = self.config.grid_shape
-        px = [-1,0,1,1,1,0,-1,-1]
-        py = [-1,-1,-1,0,1,1,1,0]
+        px = [-1, 0, 1, 1, 1, 0, -1, -1]
+        py = [-1, -1, -1, 0, 1, 1, 1, 0]
         while generate_num < n:
             x, y, flag = np.random.randint(W), np.random.randint(H), 0
             if not self.grid[y, x] == SnakeState.EMPTY:   continue
@@ -335,9 +336,10 @@ class SnakeGrid:
         """
         H, W = self.config.grid_shape
         obstacles_num = len(np.argwhere(self.grid == SnakeState.OBSTACLE))
-        if H * W // (obstacles_num * 11)  == 0:     return True
-        else:                                       return False
-
+        if H * W // (obstacles_num * 11) == 0:
+            return True
+        else:
+            return False
 
     def closest_food_dist(self):
         """
@@ -472,17 +474,31 @@ class SnakeObservation(Dict):
     """
 
     def __init__(self, shape, multi_channel=False, direction_channel=False, dtype=np.uint8):
-        self.encodings = {
-            SnakeState.EMPTY: 0,
-            **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
-            SnakeState.FOOD: 2,
-            SnakeState.OBSTACLE: 3
-        } if not direction_channel else {
-            **{enum: i for i, enum in enumerate(SnakeState)}
-        }
+        """
+        :param shape: Shape of the observation grid
+        :param multi_channel: If True, the observation grid will be a 3-channel one-hot grid
+        :param direction_channel: If False, treat snake directions as the same, else expose internal direction info
+        """
+        if direction_channel:
+            self.encodings = {
+                SnakeState.EMPTY: 0,
+                SnakeState.SNAKE_U: 1,
+                SnakeState.SNAKE_R: 2,
+                SnakeState.SNAKE_D: 3,
+                SnakeState.SNAKE_L: 4,
+                SnakeState.FOOD: 5,
+                SnakeState.OBSTACLE: 6
+            }
+        else:
+            self.encodings = {
+                SnakeState.EMPTY: 0,
+                **{enum: 1 for enum in SnakeState if enum.name.startswith('SNAKE')},
+                SnakeState.FOOD: 2,
+                SnakeState.OBSTACLE: 3
+            }
 
         # -1 for binary representation except SnakeState.EMPTY
-        self.n_states = SnakeState.n_states_external() if not direction_channel else SnakeState.n_states_internal()
+        self.n_states = SnakeState.n_states_internal() if direction_channel else SnakeState.n_states_external()
         self.n_channels = 1 if not multi_channel else self.n_states - 1
         space_dict = {}
         if multi_channel:
@@ -526,6 +542,9 @@ class SnakeObservation(Dict):
             obs = self.encode(obs)[None, ...]
         else:
             # One-hot encoding
+            # obs.shape = (H, W)
+            # self.encode(obs).shape = (H, W) (with encoded labels)
+            # ohe.shape = (H, W, n_states) (order is the same as self.encodings)
             ohe = np.eye(self.n_states, dtype=self.dtype)[self.encode(obs)]
             # Cut off the first channel containing SnakeState.EMPTY
             obs = ohe.transpose((-1, *list(range(len(ohe.shape))[:-1])))[1:]
@@ -541,10 +560,12 @@ class SnakeObservation(Dict):
         assert self['grid'].contains(obs_dict['grid']), f'grid does not match with the observation space'
         assert self['head_row'].contains(obs_dict['head_row']), f'head_row does not match with the observation space'
         assert self['head_col'].contains(obs_dict['head_col']), f'head_col does not match with the observation space'
-        assert self['head_direction'].contains(obs_dict['head_direction']), f'direction does not match with the observation space'
+        assert self['head_direction'].contains(
+            obs_dict['head_direction']), f'direction does not match with the observation space'
         assert self['tail_row'].contains(obs_dict['tail_row']), f'head_row does not match with the observation space'
         assert self['tail_col'].contains(obs_dict['tail_col']), f'head_col does not match with the observation space'
-        assert self['tail_direction'].contains(obs_dict['tail_direction']), f'direction does not match with the observation space'
+        assert self['tail_direction'].contains(
+            obs_dict['tail_direction']), f'direction does not match with the observation space'
         assert self.contains(obs_dict), f'Observation does not match with the observation space'
 
         return obs_dict
