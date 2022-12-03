@@ -1,5 +1,5 @@
 import sys
-sys.path.append("../..")
+sys.path.append("../../../../..")
 
 from functools import reduce
 import torch as T
@@ -159,16 +159,21 @@ class Agent:
         self.random_seed = random_seed
         self.gamma = gamma
 
+        self.total_done_reward = []
+        self.total_done_reward_step = []
+
         # stats
         self.avg_reward = [0 for _ in range(10)]
         self.accum_reward = 0
         self.cum_reward = []
         self.entropy_rate = []
+        self.last_obs = self.env.reset()
 
     def rollout(self, bootstrap=False):
         log_probs, values, rewards, masks, states = [], [], [], [], []
         rollout_reward, entropy = 0, 0
-        obs = self.env.reset()
+        #obs = self.env.reset()
+        obs = self.last_obs
         done = False
         for _ in range(self.rollout_steps):
             grid_obs = T.tensor(obs['grid'], dtype=T.float).to(self.device)
@@ -195,9 +200,12 @@ class Agent:
             self.cum_reward.append(self.accum_reward)
 
             obs = obs_
+            self.last_obs = obs_
 
             # No need, since non-episodic
             if done:
+                self.env.reset()
+                self.total_done_reward.append(rollout_reward)
                 break
 
         grid_obs = T.tensor(obs_['grid'], dtype=T.float).to(self.device)
@@ -330,10 +338,10 @@ if __name__ == "__main__":
 
     node_name = ['head_col', 'head_row', 'head_direction', 'tail_col', 'tail_row', 'tail_direction', 'portal_row', 'portal_col']
 
-    steps = 4_800_000
+    steps = 48_000_000
     K_steps = 3
     L_steps = 5
-    rollout_steps = 32
+    rollout_steps = 16
     random_seed = 5
     env = make_vec_env("GoogleSnake-v1", n_envs=1, env_kwargs={'config':config})
     n_actions = 3
@@ -357,6 +365,7 @@ if __name__ == "__main__":
 
     agent = Agent(input_channel, height, width, input_node, n_actions, gamma, alpha, m_alpha, betas, eps, name, env,
                   steps, K_steps, L_steps, rollout_steps, random_seed)
+    env.reset()
     agent.run()
     print("done")
     agent.plot_results()
