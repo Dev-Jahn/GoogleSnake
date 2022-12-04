@@ -11,6 +11,7 @@ from wandb.integration.sb3 import WandbCallback
 
 from algs import BMG
 from algs.bmg.policy_wrapper import MultiInputActorCriticPolicy
+from algs.policies.extractor import GsnakeExtractor, CustomCNN, NatureCNN
 from gsnake.env import GoogleSnakeEnv
 from gsnake.configs import GoogleSnakeConfig
 from utils import ensure_dir, WandbCallbackWithFood
@@ -68,38 +69,31 @@ def main(args):
         monitor_gym=False
     )
 
+    policy_kwargs = {
+        'normalize_images': False,
+        'features_extractor_class': GsnakeExtractor,
+        'features_extractor_kwargs': dict(cnn_class=NatureCNN,
+                                          # cnn_class=CustomCNN,
+                                          cnn_output_dim=256)}
     if args.method.casefold() == 'bmg':
-        policy_kwargs = {
-            'normalize_images': False,
-        }
         if args.metaoptim.casefold() == 'metasgd':
             if args.lr is None:
                 args.lr = 1e-2
             policy_kwargs.update({
                 'optimizer_class': torchopt.MetaSGD,
-                # Currently not working for some reason
-                'optimizer_kwargs': dict(
-                    momentum=args.momentum,
-                    weight_decay=args.weight_decay,
-                    dampening=args.dampening,
-                    nesterov=args.nesterov,
-                )
-            })
+                'optimizer_kwargs': dict(momentum=args.momentum, weight_decay=args.weight_decay,
+                                         dampening=args.dampening, nesterov=args.nesterov)})
         elif args.metaoptim.casefold() == 'metaadam':
             if args.lr is None:
                 args.lr = 1e-3
             policy_kwargs.update({
-                # Currently not working for some reason
                 'optimizer_class': torchopt.MetaAdam,
-                'optimizer_kwargs': dict(
-                    betas=(0.9, 0.999),
-                    eps=1e-8,
-                    weight_decay=args.weight_decay,
-                    eps_root=0.0,
-                    moment_requires_grad=False,
-                    use_accelerated_op=False
-                )
-            })
+                'optimizer_kwargs': dict(betas=(0.9, 0.999),
+                                         eps=1e-8,
+                                         weight_decay=args.weight_decay,
+                                         eps_root=0.0,
+                                         moment_requires_grad=False,
+                                         use_accelerated_op=False)})
         model = BMG(
             MultiInputActorCriticPolicy, env, K=args.K, L=args.L,
             meta_window_size=args.meta_window_size,
@@ -111,7 +105,6 @@ def main(args):
             device=args.device
         )
     elif args.method.casefold() == 'ppo':
-        policy_kwargs = {'normalize_images': False}
         model = PPO(
             "MultiInputPolicy",
             env,
