@@ -163,6 +163,7 @@ class Agent:
         # stats
         self.avg_reward = [0 for _ in range(10)]
         self.accum_reward = 0
+        self.average_reward = []
         self.cum_reward = []
         self.entropy_rate = []
         self.last_obs = self.env.reset()
@@ -265,11 +266,20 @@ class Agent:
     def plot_results(self):
 
         cr = plt.figure(figsize=(10, 10))
+        plt.plot(self.average_reward)
+        plt.xlabel('1000 Steps')
+        plt.ylabel('Average Reward')
+        plt.savefig('res/average_reward')
+        plt.close(cr)
+
+        '''
+        cr = plt.figure(figsize=(10, 10))
         plt.plot(self.cum_reward)
         plt.xlabel('Steps')
         plt.ylabel('Cumulative Reward')
         plt.savefig('res/cumulative_reward')
         plt.close(cr)
+        '''
 
         er = plt.figure(figsize=(10, 10))
         plt.plot(list(range(1, 18_750 * 16 + 1, 16)), self.entropy_rate[-18_750:])
@@ -320,7 +330,37 @@ class Agent:
                 print(self.entropy_rate[-1])
                 print("###")
 
+                # test model
+                average_reward = self.test()
+                print("test_average_reward")
+                print(average_reward)
+                print("")
+                self.average_reward.append(average_reward)
+
         self.save_models()
+
+    def test(self):
+        env = make_vec_env("GoogleSnake-v1", n_envs=1, env_kwargs={'config':config})
+        test_num = 30
+        sum_total_reward = 0
+        for t in range(test_num):
+            done = False
+            obs = env.reset()
+            total_reward = 0
+            while not done:
+                grid_obs = T.tensor(obs['grid'], dtype=T.float).to(self.device)
+                node_obs = T.cat(tuple([T.tensor(obs[name], dtype=T.float) for name in self.node_name]), dim=1).to(self.device)
+                dist, v = self.actorcritic(grid_obs, node_obs)
+
+                action = dist.sample()
+
+                obs, reward, done, _ = env.step(action.cpu().numpy())
+
+                total_reward += reward
+            sum_total_reward += total_reward
+        return sum_total_reward // test_num
+
+
 
     def save_models(self):
         self.actorcritic.save_checkpoint()
@@ -338,7 +378,7 @@ if __name__ == "__main__":
 
     node_name = ['head_col', 'head_row', 'head_direction', 'tail_col', 'tail_row', 'tail_direction', 'portal_row', 'portal_col']
 
-    steps = 5_000_000
+    steps = 100_000
     K_steps = 3
     L_steps = 5
     rollout_steps = 16
