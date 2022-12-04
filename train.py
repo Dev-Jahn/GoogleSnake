@@ -21,7 +21,7 @@ parser.add_argument('--method', choices=['bmg', 'ppo'], help='Training method', 
 
 # Shared arguments
 parser.add_argument('--env', type=str, default='GoogleSnake-v1')
-parser.add_argument('--n_env', type=int, default=10, help='Number of parallel environments')
+parser.add_argument('--n_envs', type=int, default=10, help='Number of parallel environments')
 parser.add_argument('--n_steps', type=int, default=16, help='Number of steps per rollout')
 parser.add_argument('--max_steps', type=int, default=1_000_000, help='Max total steps to train')
 parser.add_argument('--batch_size', type=int, default=16, help='Train batch size')
@@ -55,7 +55,7 @@ def main(args):
     torch.save(kwargs, os.path.join(runpath, 'vec_env_kwargs.pt'))
 
     # Parallel environments
-    env = make_vec_env(args.env, n_envs=args.n_env, **kwargs)
+    env = make_vec_env(args.env, n_envs=args.n_envs, **kwargs)
 
     runconfig = args.__dict__
     runconfig.update({'envconfig': kwargs['env_kwargs']['config'].__dict__, })
