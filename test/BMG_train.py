@@ -29,7 +29,7 @@ def main(n_env=10, K=7, L=9, n_steps=16, max_ep_steps=1000, max_steps=1_000_000,
     config = GoogleSnakeConfig(
         # reward_mode='basic',
         multi_channel=True,
-        direction_channel=True,
+        seperate_direction=True,
         reward_mode='time_constrained_and_food',
         reward_scale=1,
         n_foods=3

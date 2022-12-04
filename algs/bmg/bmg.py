@@ -28,7 +28,7 @@ name = '5000_dir_channel_50M'
 
 config = GoogleSnakeConfig(
     multi_channel=True,
-    direction_channel=True,
+    seperate_direction=True,
     reward_mode='time_constrained_and_food',
     reward_scale=1,
     n_foods=3

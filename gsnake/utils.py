@@ -494,15 +494,16 @@ class SnakeGrid:
 
     def remove_apple_node(self, position, eat_food, eat_anti_food):
         cursor = self._find_position_apple(position)
-        if cursor == None:  return
-
+        if cursor is None:
+            return
         eat_poison_food = self.config.poison and eat_anti_food
         if eat_poison_food:
             self.poison_count = self.poison_count_max
             self.poisoned = True
 
         self.grid[cursor.pos] = SnakeState.EMPTY
-        if self.anti_food_check:    self.grid[cursor.anti_pos] = SnakeState.EMPTY
+        if self.anti_food_check:
+            self.grid[cursor.anti_pos] = SnakeState.EMPTY
 
         if cursor.next_node is None:
             cursor.prev_node.next_node = None
@@ -550,11 +551,11 @@ class SnakeObservation(Dict):
     Observation space for the snake environment
     """
 
-    def __init__(self, shape, multi_channel=False, direction_channel=False, dtype=np.uint8):
+    def __init__(self, shape, multi_channel=False, seperate_direction=False, dtype=np.uint8):
         """
         :param shape: Shape of the observation grid
         :param multi_channel: If True, the observation grid will be a 3-channel one-hot grid
-        :param direction_channel: If False, treat snake directions as the same, else expose internal direction info
+        :param seperate_direction: If False, treat snake directions as the same, else expose internal direction info
         """
         self.encodings = {
             SnakeState.EMPTY: 0,
@@ -562,7 +563,7 @@ class SnakeObservation(Dict):
             SnakeState.FOOD: 2,
             SnakeState.OBSTACLE: 3,
             SnakeState.ANTI_FOOD: 4,
-        } if not direction_channel else {
+        } if not seperate_direction else {
             SnakeState.EMPTY: 0,
             **{enum: i + 1 for i, enum in enumerate(SnakeState) if enum.name.startswith('SNAKE')},
             SnakeState.FOOD: 5,
@@ -571,7 +572,7 @@ class SnakeObservation(Dict):
         }
 
         # -1 for binary representation except SnakeState.EMPTY
-        self.n_states = SnakeState.n_states_internal() if direction_channel else SnakeState.n_states_external()
+        self.n_states = SnakeState.n_states_internal() if seperate_direction else SnakeState.n_states_external()
         self.n_channels = 1 if not multi_channel else self.n_states - 1
         space_dict = {}
         if multi_channel:

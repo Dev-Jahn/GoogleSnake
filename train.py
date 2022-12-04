@@ -24,13 +24,21 @@ parser.add_argument('--env', type=str, default='GoogleSnake-v1')
 parser.add_argument('--n_env', type=int, default=10, help='Number of parallel environments')
 parser.add_argument('--n_steps', type=int, default=16, help='Number of steps per rollout')
 parser.add_argument('--max_steps', type=int, default=1_000_000, help='Max total steps to train')
-parser.add_argument('--lr', type=float, default=1e-2, help='Learning rate for the policy')
+parser.add_argument('--batch_size', type=int, default=16, help='Train batch size')
+parser.add_argument('--lr', type=float, help='Learning rate for the policy')
+parser.add_argument('--multi_channel', action='store_true', help='Use multi-channel observation')
+parser.add_argument('--seperate_direction', action='store_true', help='Use seperate direction channel')
 
 # BMG arguments
 parser.add_argument('--K', type=int, default=7, help='Number of inner update steps')
 parser.add_argument('--L', type=int, default=9, help='Number of bootstrapping steps')
+parser.add_argument('--metaoptim', choices=['MetaSGD', 'MetaAdam'], default='MetaSGD', help='Meta-optimizer')
 parser.add_argument('--metalr', type=float, default=1e-4, help='Learning rate of outer model')
 parser.add_argument('--meta-window-size', type=int, default=10, help='Number of rollouts to use for metalearner input')
+parser.add_argument('--momentum', type=float, default=0.0, help='Momentum for MetaSGD')
+parser.add_argument('--weight_decay', type=float, default=0.0, help='Weight decay for MetaSGD and MetaAdam')
+parser.add_argument('--dampening', type=float, default=0.0, help='Dampening for MetaSGD')
+parser.add_argument('--nesterov', action='store_true', help='Nesterov momentum for MetaSGD')
 
 # Misc
 parser.add_argument('--savepath', type=str, default='./ckpt')
@@ -63,8 +71,35 @@ def main(args):
     if args.method.casefold() == 'bmg':
         policy_kwargs = {
             'normalize_images': False,
-            'optimizer_class': torchopt.MetaSGD,
         }
+        if args.metaoptim.casefold() == 'metasgd':
+            if args.lr is None:
+                args.lr = 1e-2
+            policy_kwargs.update({
+                'optimizer_class': torchopt.MetaSGD,
+                # Currently not working for some reason
+                'optimizer_kwargs': dict(
+                    momentum=args.momentum,
+                    weight_decay=args.weight_decay,
+                    dampening=args.dampening,
+                    nesterov=args.nesterov,
+                )
+            })
+        elif args.metaoptim.casefold() == 'metaadam':
+            if args.lr is None:
+                args.lr = 1e-3
+            policy_kwargs.update({
+                # Currently not working for some reason
+                'optimizer_class': torchopt.MetaAdam,
+                'optimizer_kwargs': dict(
+                    betas=(0.9, 0.999),
+                    eps=1e-8,
+                    weight_decay=args.weight_decay,
+                    eps_root=0.0,
+                    moment_requires_grad=False,
+                    use_accelerated_op=False
+                )
+            })
         model = BMG(
             MultiInputActorCriticPolicy, env, K=args.K, L=args.L,
             meta_window_size=args.meta_window_size,
@@ -82,7 +117,7 @@ def main(args):
             env,
             learning_rate=3e-4,
             n_steps=args.n_steps,
-            batch_size=args.n_env * args.n_steps,
+            batch_size=args.batch_size,
             policy_kwargs=policy_kwargs,
             verbose=0, tensorboard_log=f'runs/{run.id}',
             device=args.device
@@ -105,8 +140,8 @@ def build_kwargs(args):
     if args.env == 'GoogleSnake-v1':
         config = GoogleSnakeConfig(
             # reward_mode='basic',
-            multi_channel=True,
-            direction_channel=True,
+            multi_channel=args.multi_channel,
+            seperate_direction=args.seperate_direction,
             reward_mode='time_constrained_and_food',
             reward_scale=1,
             n_foods=3

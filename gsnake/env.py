@@ -14,7 +14,7 @@ class GoogleSnakeEnv(Env):
         self.seed = seed
         self.action_space = spaces.Discrete(n=3)
         self.observation_space = SnakeObservation(self.config.grid_shape, multi_channel=self.config.multi_channel,
-                                                  direction_channel=self.config.direction_channel)
+                                                  seperate_direction=self.config.seperate_direction)
         self.state = SnakeGrid(self.config, seed=seed)
         self.food_taken = 0
 
@@ -71,8 +71,8 @@ class GoogleSnakeEnv(Env):
         # Distance based reward
         elif self.state.closest_food_dist() - dist < 0:
             reward += self.config.DIST
-        elif self.state.closest_food_dist() - dist > 0:
-            reward -= self.config.DIST
+        # elif self.state.closest_food_dist() - dist > 0:
+        #     reward -= self.config.DIST
 
         if self.config.moving:
             self.state.move_apple()

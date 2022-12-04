@@ -157,7 +157,7 @@ class BMG(OnPolicyAlgorithm):
         # self._update_learning_rate(self.policy.optimizer)
         param_grads = dict()
 
-        # This will only loop once (get all data in one go)
+        # If batch_size=None, iterate with n_envs*n_steps total samples(steps)
         for rollout_data in self.rollout_buffer.get(batch_size=None):
             self.avg_rollout_reward_buffer.append(self.rollout_buffer.rewards.mean())
             actions = rollout_data.actions

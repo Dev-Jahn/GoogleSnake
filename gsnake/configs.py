@@ -16,7 +16,7 @@ class GoogleSnakeConfig:
     """
     _REWARDS = Literal['basic', 'time_constrained', 'time_constrained_and_food']
 
-    def __init__(self, width=15, height=10, multi_channel=False, direction_channel=False,
+    def __init__(self, width=15, height=10, multi_channel=False, seperate_direction=False,
                  reward_mode: _REWARDS = 'basic', reward_scale=1.0,
                  n_foods=1, wall=False, portal=False, cheese=False, loop=False, reverse=False, moving=False,
                  yinyang=False, key=False, box=False, poison=False, transparent=False, flag=False, slough=False,
@@ -31,7 +31,7 @@ class GoogleSnakeConfig:
         # whether to use multichannel one-hot or single channel image for observation
         self.multi_channel = multi_channel
         # every direction has its own channel
-        self.direction_channel = direction_channel
+        self.seperate_direction = seperate_direction
 
         # start position and direction of the snake
         self.start_pos = (self.height // 2, self.width // 4)
