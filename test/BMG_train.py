@@ -1,5 +1,7 @@
 import os
 import gym
+import sys
+sys.path.append("../")
 
 import torch
 import torchopt
@@ -8,14 +10,17 @@ from stable_baselines3.common.env_util import make_vec_env
 import wandb
 from wandb.integration.sb3 import WandbCallback
 
-from algs import BMG
-from algs.bmg.policy_wrapper import MultiInputActorCriticPolicy
+from algs.bmg.bmg_sb3_v2 import BMG
+from algs.policies.extractor import MultiInputActorCriticPolicy
+#from algs.bmg.policy_wrapper import MultiInputActorCriticPolicy
+#from stable_baselines3.common.policies import MultiInputActorCriticPolicy
+
 from gsnake.env import GoogleSnakeEnv
 from gsnake.configs import GoogleSnakeConfig
 from utils import ensure_dir
 
 
-def main(n_env=10, K=7, L=9, n_steps=16, max_ep_steps=1000, max_steps=1_000_000, postfix='base', device="cuda"):
+def main(n_env=10, K=7, L=9, n_steps=128, max_ep_steps=1000, max_steps=10_000_000, postfix='base', device="cuda"):
     register(
         id='GoogleSnake-v1',
         entry_point=GoogleSnakeEnv,
@@ -56,9 +61,9 @@ def main(n_env=10, K=7, L=9, n_steps=16, max_ep_steps=1000, max_steps=1_000_000,
     model = BMG(
         MultiInputActorCriticPolicy, env, K=K, L=L,
         meta_window_size=10,
-        learning_rate=1e-1,
+        learning_rate=3e-4,
         n_steps=n_steps,
-        meta_learning_rate=1e-4,
+        meta_learning_rate=1e-5,
         policy_kwargs=policy_kwargs,
         verbose=0, tensorboard_log=f'runs/{run.id}',
         device=device
@@ -68,3 +73,5 @@ def main(n_env=10, K=7, L=9, n_steps=16, max_ep_steps=1000, max_steps=1_000_000,
         callback=WandbCallback(model_save_path=savepath, verbose=2)
     )
     run.finish()
+
+main()

@@ -40,4 +40,7 @@ class MultiInputActorCriticPolicy(MultiInputActorCriticPolicy_):
             }
             for module, gain in module_gains.items():
                 module.apply(partial(self.init_weights, gain=gain))
-        self.optimizer = self.optimizer_class(self, lr=lr_schedule(1), **self.optimizer_kwargs)
+        self.optimizer = self.optimizer_class(self, lr=lr_schedule(1), moment_requires_grad=True, **self.optimizer_kwargs)
+        # if MetaAdam
+        # self.optimizer = self.optimizer_class(self, lr=lr_schedule(1), moment_requires_grad=True, use_accelerated_op=True, **self.optimizer_kwargs)
+
