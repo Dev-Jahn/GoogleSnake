@@ -130,11 +130,26 @@ class BMG(OnPolicyAlgorithm):
         self.avg_rollout_reward_buffer = deque([0] * 10, maxlen=meta_window_size)
 
         self.batch_size = batch_size
-        self.n_epochs = n_epochs
+        self.n_epochs = K + L
         self.clip_range = clip_range
         self.clip_range_vf = clip_range_vf
         self.normalize_advantage = normalize_advantage
         self.target_kl = target_kl
+
+        # define meta_parameter and its optimizer
+        self.vf_coef = nn.Parameter(torch.tensor(0.4, requires_grad=True))
+        self.ent_coef = nn.Parameter(torch.tensor(0.00, requires_grad=True))
+        #self.ent_coef = 0
+        self.policy_coef = nn.Parameter(torch.tensor(1.0, requires_grad=True))
+        self.coef_optimizer = torch.optim.Adam(
+                    [self.policy_coef] + [self.vf_coef] + [self.ent_coef],
+                    lr=self.meta_learning_rate,
+                    betas=(0.9, 0.999),
+                    eps=1e-4
+        )
+
+        self.pretrain_step = 2_000_000 // n_steps // 10 * (K + L)
+        print(self.pretrain_step)
 
         if _init_setup_model:
             self._setup_model()
@@ -164,17 +179,13 @@ class BMG(OnPolicyAlgorithm):
         if self.clip_range_vf is not None:
             clip_range_vf = self.clip_range_vf(self._current_progress_remaining)
 
-        entropy_losses = []
-        pg_losses, value_losses = [], []
-        clip_fractions = []
-
-        states = []
+        bootstrap_rollout_data = []
 
         # Do a complete pass on the rollout buffer
         for rollout_data in self.rollout_buffer.get(self.batch_size):
 
             if bootstrap == True:
-                states.append(rollout_data.observations)
+                bootstrap_rollout_data.append(rollout_data)
 
             actions = rollout_data.actions
             if isinstance(self.action_space, spaces.Discrete):
@@ -202,11 +213,6 @@ class BMG(OnPolicyAlgorithm):
             policy_loss_2 = advantages * torch.clamp(ratio, 1 - clip_range, 1 + clip_range)
             policy_loss = -torch.min(policy_loss_1, policy_loss_2).mean()
 
-            # Logging
-            pg_losses.append(policy_loss.item())
-            clip_fraction = torch.mean((torch.abs(ratio - 1) > clip_range).float()).item()
-            clip_fractions.append(clip_fraction)
-
             if self.clip_range_vf is None:
                 # No clipping
                 values_pred = values
@@ -218,7 +224,6 @@ class BMG(OnPolicyAlgorithm):
                 )
             # Value loss using the TD(gae_lambda) target
             value_loss = F.mse_loss(rollout_data.returns, values_pred)
-            value_losses.append(value_loss.item())
 
             # Entropy loss favor exploration
             if entropy is None:
@@ -227,11 +232,8 @@ class BMG(OnPolicyAlgorithm):
             else:
                 entropy_loss = -torch.mean(entropy)
 
-            entropy_losses.append(entropy_loss.item())
-
-            # PPO or BMG ?
-            self.ent_coef = self.meta_learner(torch.Tensor(self.avg_rollout_reward_buffer).to(self.meta_learner.device))
-            loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
+            #loss = self.policy_coef.item() * policy_loss + self.ent_coef.item() * entropy_loss + self.vf_coef.item() * value_loss
+            loss = self.policy_coef * policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
 
             # Clip grad norm
             self.policy.optimizer.step(loss)
@@ -242,27 +244,105 @@ class BMG(OnPolicyAlgorithm):
         explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
 
         if bootstrap == True:
-            return states
+            return bootstrap_rollout_data
 
-    def outer(self, ac_k, tb, states, ac_k_state_dict):
-        dist_tb = []
-        for observation in states:
+    def generate_loss(self, rollout_data, model, outer_loop=True):
+        clip_range = self.clip_range(self._current_progress_remaining)
+        # Optional: clip range for the value function
+        if self.clip_range_vf is not None:
+            clip_range_vf = self.clip_range_vf(self._current_progress_remaining)
+        actions = rollout_data.actions
+
+        if isinstance(self.action_space, spaces.Discrete):
+            # Convert discrete action from float to long
+            actions = rollout_data.actions.long().flatten()
+
+        # Re-sample the noise matrix because the log_std has changed
+        if self.use_sde:
+            model.reset_noise(self.batch_size)
+
+        values, log_prob, entropy = model.evaluate_actions(rollout_data.observations, actions)
+        values = values.flatten()
+
+        # Normalize advantage
+        advantages = rollout_data.advantages
+        # Normalization does not make sense if mini batchsize == 1, see GH issue #325
+        if self.normalize_advantage and len(advantages) > 1:
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        # ratio between old and new policy, should be one at the first iteration
+        ratio = torch.exp(log_prob - rollout_data.old_log_prob)
+
+        # clipped surrogate loss
+        policy_loss_1 = advantages * ratio
+        policy_loss_2 = advantages * torch.clamp(ratio, 1 - clip_range, 1 + clip_range)
+        policy_loss = -torch.min(policy_loss_1, policy_loss_2).mean()
+
+        if self.clip_range_vf is None:
+            # No clipping
+            values_pred = values
+        else:
+            # Clip the difference between old and new value
+            # NOTE: this depends on the reward scaling
+            values_pred = rollout_data.old_values + th.clamp(
+                values - rollout_data.old_values, -clip_range_vf, clip_range_vf
+            )
+        # Value loss using the TD(gae_lambda) target
+        value_loss = F.mse_loss(rollout_data.returns, values_pred)
+
+        # Entropy loss favor exploration
+        if entropy is None:
+            # Approximate entropy when no analytical form
+            entropy_loss = -torch.mean(-log_prob)
+        else:
+            entropy_loss = -torch.mean(entropy)
+
+        # PPO or BMG ?
+        #self.ent_coef = self.meta_learner(torch.Tensor(self.avg_rollout_reward_buffer).to(self.meta_learner.device))
+        #self.ent_coef = self.meta_learner(torch.Tensor([1.0] * 10).to(self.meta_learner.device))
+        loss = self.policy_coef * policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
+
+        '''
+        print()
+        print("p, e, v")
+        print(policy_loss)
+        print(entropy_loss)
+        print(value_loss)
+        '''
+
+        return loss
+
+
+    def outer(self, ac_k, tb, rollout_datas, ac_k_state_dict):
+
+        loss_tb = []
+        for rollout_data in rollout_datas:
             with torch.no_grad():
-                bootstrap_dist = tb.get_distribution(observation)
-                dist_tb.append(bootstrap_dist)
+                bootstrap_loss = self.generate_loss(rollout_data, tb)
+                loss_tb.append(bootstrap_loss)
 
         torchopt.recover_state_dict(ac_k, ac_k_state_dict)
 
-        dist_k = []
-        for observation in states:
-            kth_dist = ac_k.get_distribution(observation)
-            dist_k.append(kth_dist)
+        loss_k = []
+        for rollout_data in rollout_datas:
+            kth_loss = self.generate_loss(rollout_data, ac_k)
+            loss_k.append(kth_loss)
 
-        kl_div = sum([kl_divergence(dist_tb[i], dist_k[i]).sum() for i in range(len(states))])
+        l2_loss = [(loss_k[i] - loss_tb[i]) * (loss_k[i] - loss_tb[i]) for i in range(len(rollout_data))]
+        l2_loss = sum(l2_loss)/len(l2_loss)
 
-        self.meta_optimizer.zero_grad()
-        kl_div.backward()
-        self.meta_optimizer.step()
+        print()
+        print(self.ent_coef)
+        print(self.policy_coef)
+        print(self.vf_coef)
+
+        self.coef_optimizer.zero_grad()
+        l2_loss.backward()
+
+        print(self._n_updates)
+
+        if self.pretrain_step < self._n_updates:
+            self.coef_optimizer.step()
 
     def train(self) -> None:
         """
@@ -277,8 +357,8 @@ class BMG(OnPolicyAlgorithm):
         for _ in range(self.L - 1):     self.inner()
         k_l_m1_state_dict = torchopt.extract_state_dict(self.policy)
 
-        states = self.inner(bootstrap=True)
-        self.outer(self.kth_policy, self.policy, states, k_state_dict)
+        rollout_datas = self.inner(bootstrap=True)
+        self.outer(self.kth_policy, self.policy, rollout_datas, k_state_dict)
 
         # Recover inner model parameters to the point before bootstrapping and stop gradient
         torchopt.recover_state_dict(self.policy, k_l_m1_state_dict)
@@ -329,7 +409,7 @@ class MLP(nn.Module):
             nn.Linear(input_size, feature_size),
             nn.ReLU(),
             nn.Linear(feature_size, 1),
-            nn.ReLU()
+            nn.Sigmoid()
         )
         self.to(device)
 
